@@ -1,12 +1,14 @@
 ﻿using System.IO;
 using System.Reflection;
+using System.Xml.Serialization;
 
 namespace OracleStructExporter.Core
 {
     public class TextFilesLog:Log
     {
-        internal string PathToLogFiles { get; set; }
-
+        [XmlElement]
+        public string PathToLogFiles { get; set; }
+        [XmlIgnore]
         public string PathToLogFilesC
         {
             get

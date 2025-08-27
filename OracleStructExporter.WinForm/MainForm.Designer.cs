@@ -77,6 +77,8 @@
             this.cbJobs = new System.Windows.Forms.CheckBox();
             this.cbFunctions = new System.Windows.Forms.CheckBox();
             this.cbDBlinks = new System.Windows.Forms.CheckBox();
+            this.btCheckAllConnections = new System.Windows.Forms.Button();
+            this.btCheckNoneConnections = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -101,8 +103,8 @@
             // 
             // splitContainer1.Panel1
             // 
-            this.splitContainer1.Panel1.Controls.Add(this.panel1);
             this.splitContainer1.Panel1.Controls.Add(this.panel2);
+            this.splitContainer1.Panel1.Controls.Add(this.panel1);
             this.splitContainer1.Panel1.Controls.Add(this.panel7);
             // 
             // splitContainer1.Panel2
@@ -115,12 +117,14 @@
             // 
             // panel1
             // 
+            this.panel1.Controls.Add(this.btCheckNoneConnections);
+            this.panel1.Controls.Add(this.btCheckAllConnections);
             this.panel1.Controls.Add(this.label1);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Top;
             this.panel1.Location = new System.Drawing.Point(0, 0);
             this.panel1.Name = "panel1";
             this.panel1.Size = new System.Drawing.Size(423, 31);
-            this.panel1.TabIndex = 0;
+            this.panel1.TabIndex = 1;
             // 
             // label1
             // 
@@ -135,10 +139,10 @@
             // 
             this.panel2.Controls.Add(this.gridConnections);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panel2.Location = new System.Drawing.Point(0, 0);
+            this.panel2.Location = new System.Drawing.Point(0, 31);
             this.panel2.Name = "panel2";
-            this.panel2.Size = new System.Drawing.Size(423, 518);
-            this.panel2.TabIndex = 1;
+            this.panel2.Size = new System.Drawing.Size(423, 487);
+            this.panel2.TabIndex = 0;
             // 
             // gridConnections
             // 
@@ -152,8 +156,10 @@
             this.gridConnections.Dock = System.Windows.Forms.DockStyle.Fill;
             this.gridConnections.Location = new System.Drawing.Point(0, 0);
             this.gridConnections.Name = "gridConnections";
-            this.gridConnections.Size = new System.Drawing.Size(423, 518);
+            this.gridConnections.RowHeadersVisible = false;
+            this.gridConnections.Size = new System.Drawing.Size(423, 487);
             this.gridConnections.TabIndex = 0;
+            this.gridConnections.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.gridConnections_CellDoubleClick);
             // 
             // colChecked
             // 
@@ -578,6 +584,26 @@
             this.cbDBlinks.Text = "dblinks";
             this.cbDBlinks.UseVisualStyleBackColor = true;
             // 
+            // btCheckAllConnections
+            // 
+            this.btCheckAllConnections.Location = new System.Drawing.Point(274, 5);
+            this.btCheckAllConnections.Name = "btCheckAllConnections";
+            this.btCheckAllConnections.Size = new System.Drawing.Size(70, 23);
+            this.btCheckAllConnections.TabIndex = 1;
+            this.btCheckAllConnections.Text = "Все";
+            this.btCheckAllConnections.UseVisualStyleBackColor = true;
+            this.btCheckAllConnections.Click += new System.EventHandler(this.btCheckAllConnections_Click);
+            // 
+            // btCheckNoneConnections
+            // 
+            this.btCheckNoneConnections.Location = new System.Drawing.Point(350, 5);
+            this.btCheckNoneConnections.Name = "btCheckNoneConnections";
+            this.btCheckNoneConnections.Size = new System.Drawing.Size(70, 23);
+            this.btCheckNoneConnections.TabIndex = 2;
+            this.btCheckNoneConnections.Text = "Ничего";
+            this.btCheckNoneConnections.UseVisualStyleBackColor = true;
+            this.btCheckNoneConnections.Click += new System.EventHandler(this.btCheckNoneConnections_Click);
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -661,6 +687,8 @@
         private System.Windows.Forms.Label lblPort;
         private System.Windows.Forms.TextBox txtHost;
         private System.Windows.Forms.Label lblHost;
+        private System.Windows.Forms.Button btCheckNoneConnections;
+        private System.Windows.Forms.Button btCheckAllConnections;
     }
 }
 

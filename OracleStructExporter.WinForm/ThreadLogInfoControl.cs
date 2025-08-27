@@ -21,9 +21,14 @@ namespace OracleStructExporter.WinForm
             lblStatus.Text = text;
         }
 
-        public void ResetProgressBar()
+        public void StartProgressBar()
         {
             progressBar.Style = ProgressBarStyle.Marquee;
+        }
+
+        public void EndProgressBar()
+        {
+            progressBar.Style = ProgressBarStyle.Blocks;
         }
 
         //public void ResetControls()

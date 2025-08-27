@@ -54,7 +54,7 @@
     <Compile Include="ExportProgressDataStage.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="ProgressDataManager.cs" />
-    <Compile Include="Settings\Connections.cs" />
+    <Compile Include="SettingsHelper.cs" />
     <Compile Include="DBStructs\ColumnComment.cs" />
     <Compile Include="DBStructs\ConstraintColumnStruct.cs" />
     <Compile Include="DBStructs\ConstraintStruct.cs" />

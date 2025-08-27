@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace OracleStructExporter.WinForm
@@ -18,17 +19,16 @@ namespace OracleStructExporter.WinForm
         public MainForm()
         {
             InitializeComponent();
+            LoadSettingsFromFile();
+            LoadConnectionsGrid();
         }
 
-        OSESettings LoadSettingsFromFile()
+        void LoadSettingsFromFile()
         {
-            var settings = new OSESettings();
+            settings = SettingsHelper.LoadSettings("OSESettings.xml");
 
-            {
-                //TODO здесь надо заполнить settings по результатам парсинга файла настроек
-            }
 
-            {
+            /*{
                 //временное решение
                 settings.Connections = new Connections();
                 settings.Connections.ConnectionsList = new List<Connection>();
@@ -57,11 +57,36 @@ namespace OracleStructExporter.WinForm
                 logSettings.DBLog.Enabled = true;
 
                 settings.LogSettings = logSettings;
-            }
+            }*/
 
             settings.RepairSettingsValues();
+        }
+		
+		private void LoadConnectionsGrid()
+        {
+            gridConnections.AutoGenerateColumns = false;
+            gridConnections.DataSource = settings.Connections;
+            gridConnections.Columns.Clear();
+            
+            var col1 = new DataGridViewCheckBoxColumn();
+            col1.Name = "colConnSelected";
+            col1.HeaderText = String.Empty;
+            col1.Width = 30;
+            gridConnections.Columns.Add(col1);
+            var col2 = new DataGridViewTextBoxColumn();
+            col2.Name = "colConnDbIdC";
+            col2.DataPropertyName = "DBIdC";
+            col2.HeaderText = "БД";
+            col2.Width = 200;
+            gridConnections.Columns.Add(col2);
+            var col3 = new DataGridViewTextBoxColumn();
+            col3.Name = "colConnUserName";
+            col3.DataPropertyName = "UserName";
+            col3.HeaderText = "Схема";
+            col3.Width = 190;
+            gridConnections.Columns.Add(col3);
 
-            return settings;
+            //gridConnections.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
 
         void UpdateSettingsFromInputs(OSESettings settings)
@@ -101,76 +126,101 @@ namespace OracleStructExporter.WinForm
 
         private void btnExport_Click(object sender, EventArgs e)
         {
-            
-
             threads = new List<ThreadInfo>();
-            settings = LoadSettingsFromFile();
             logger = new Logger(settings.LogSettings);
 
-            bool startThreadsList;
+            UpdateSettingsFromInputs(settings);
+
+            // Определение подключений для обработки
+            foreach (DataGridViewRow row in gridConnections.Rows)
             {
-                //TODO если пользователь выбрал хотя бы одно (через соответствующий checkbox) соединение в таблице gridConnections, то запускаем в потоках все выбранные соединения, игнорируя и выставляя "Disabled" все опциональные элементы ввода (в группах "Типы объектов", "Дополнительно", элементы "Целевая папка" и так далее), иначе запускаем один поток в соответствии с заполненными пользователем полями
-                //здесь надо выставить флаг
-                startThreadsList = false;
+                var checkboxCell = row.Cells[0] as DataGridViewCheckBoxCell;
+                var checkboxValue = checkboxCell.Value != null ? (bool)checkboxCell.Value : false;
+                if (checkboxValue)
+                {
+                    var dbIdCell = row.Cells[1] as DataGridViewTextBoxCell;
+                    var userNameCell = row.Cells[2] as DataGridViewTextBoxCell;
+                    var dbIdC = dbIdCell.Value.ToString();
+                    var userName = userNameCell.Value.ToString();
+                    var conn = settings.Connections.FirstOrDefault(c => c.DBIdC == dbIdC && c.UserName == userName);
+
+                    ThreadInfo threadInfo = new ThreadInfo();
+                    threadInfo.Connection = conn;
+                    threadInfo.ExportSettings = settings.ExportSettings;
+                    threads.Add(threadInfo);
+                }
             }
 
-            if (startThreadsList)
+            if (!threads.Any())
             {
-                //TODO собираем информация о выбранных коннектах, и запускаем для каждого свой поток
-                //здесь надо заполнить массив threads
-            }
-            else
-            {
+                // Создание подключения из ручного ввода
                 var conn = GetConnectionParamsFromInputs();
-                UpdateSettingsFromInputs(settings);
 
                 if (string.IsNullOrEmpty(conn.Host) || string.IsNullOrEmpty(conn.Port) ||
                     string.IsNullOrEmpty(conn.SID) || string.IsNullOrEmpty(conn.UserName) ||
-                    string.IsNullOrEmpty(settings.ExportSettings.PathToExportDataMain) || !settings.ExportSettings.ExportSettingsDetails.ObjectTypesToProcessC.Any())
+                    string.IsNullOrEmpty(settings.ExportSettings.PathToExportDataMain) ||
+                    !settings.ExportSettings.ExportSettingsDetails.ObjectTypesToProcessC.Any())
                 {
                     MessageBox.Show("Заполните все обязательные поля и выберите хотя бы один тип объекта");
                     return;
                 }
 
-
-                ThreadLogInfoControl threadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
-                    c.Connection.DBIdC.ToUpper() == conn.DBIdC.ToUpper() &&
-                    c.Connection.UserName.ToUpper() == conn.UserName.ToUpper());
-                if (threadLogInfoControl == null)
+                var existingConn = settings.Connections.FirstOrDefault(c =>
+                    c.Host.ToUpper() == conn.Host.ToUpper() &&
+                    c.Port.ToUpper() == conn.Port.ToUpper() &&
+                    c.SID.ToUpper() == conn.SID.ToUpper() &&
+                    c.UserName.ToUpper() == conn.UserName.ToUpper());
+                if (existingConn != null)
+                    conn = existingConn;
+                else
                 {
-                  threadLogInfoControl = new ThreadLogInfoControl();
-                  threadLogInfoControl.Connection = conn;
-                  threadLogInfoControls.Add(threadLogInfoControl);
-                  var newTab = new TabPage($"{threadLogInfoControl.Connection.UserName}@{threadLogInfoControl.Connection.DBIdC}");
-                  tabCtrlLog.TabPages.Add(newTab);
-                  newTab.Controls.Add(threadLogInfoControl);
-                  threadLogInfoControl.Dock = DockStyle.Fill;
+                    settings.Connections.Add(conn);
                 }
-
-
-                settings.Connections.ConnectionsList.Add(conn);
-
-                settings.LogSettings.DBLog.DBLogDBId = conn.DBIdC;
-                settings.LogSettings.DBLog.DBLogUserName = conn.UserName;
-
-                threadLogInfoControl.SetProgressStatus("Выгружено: 0, осталось выгрузить: 0");
-                threadLogInfoControl.ResetProgressBar();
-
-                btnExport.Enabled = false;
-                btnCancel.Enabled = true;
-
-                exporter = new Exporter();
-                exporter.ProgressChanged += ProgressChanged;
 
                 ThreadInfo threadInfo = new ThreadInfo();
                 threadInfo.Connection = conn;
                 threadInfo.ExportSettings = settings.ExportSettings;
                 threads.Add(threadInfo);
+
             }
+
+            foreach (var threadInfo in threads)
+            {
+                var conn = threadInfo.Connection;
+                ThreadLogInfoControl threadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
+                    c.Connection.DBIdC.ToUpper() == conn.DBIdC.ToUpper() &&
+                    c.Connection.UserName.ToUpper() == conn.UserName.ToUpper());
+                if (threadLogInfoControl == null)
+                {
+                    threadLogInfoControl = new ThreadLogInfoControl();
+                    threadLogInfoControl.Connection = conn;
+                    threadLogInfoControls.Add(threadLogInfoControl);
+                    var newTab =
+                        new TabPage(
+                            $"{threadLogInfoControl.Connection.UserName}@{threadLogInfoControl.Connection.DBIdC}");
+                    tabCtrlLog.TabPages.Add(newTab);
+                    newTab.Controls.Add(threadLogInfoControl);
+                    threadLogInfoControl.Dock = DockStyle.Fill;
+                }
+
+                //settings.LogSettings.DBLog.DBLogDBId = conn.DBIdC;
+                //settings.LogSettings.DBLog.DBLogUserName = conn.UserName;
+
+                threadLogInfoControl.SetProgressStatus("Выгружено: 0, осталось выгрузить: 0");
+                threadLogInfoControl.StartProgressBar();
+            }
+
+            btnExport.Enabled = false;
+            btnCancel.Enabled = true;
+
+            exporter = new Exporter();
+            exporter.ProgressChanged += ProgressChanged;
+
+            
 
             if (settings.LogSettings.DBLog.Enabled)
             {
-                var dbLogConn = settings.Connections.ConnectionsList.First(c =>
+                var dbLogConn = settings.Connections.First(c =>
                     c.DBIdC.ToUpper() == settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
                     settings.LogSettings.DBLog.DBLogUserName.ToUpper());
                 Exporter.SetNewProcess(settings.LogSettings.DBLog.DBLogPrefix, dbLogConn, out processId);
@@ -180,13 +230,17 @@ namespace OracleStructExporter.WinForm
                 processId = "NONE";
             }
 
+            threads.ForEach(c=>c.ProcessId = processId);
 
-            foreach (var thread in threads)
-            {
-                thread.ProcessId = processId;
-                exporter.StartWork(thread);
-            }
+            exporter.StartWork(threads);
+
+            //foreach (var thread in threads)
+            //{
+            //    thread.ProcessId = processId;
+            //    exporter.StartWork(thread);
+            //}
         }
+
 
         private void btnCancel_Click(object sender, EventArgs e)
         {
@@ -216,7 +270,8 @@ namespace OracleStructExporter.WinForm
                 // Для ProgressBar: меняем стиль, если это первый прогресс
                 currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.TotalObjects);
                 // Обновление значения прогресс-бара
-                currentThreadLogInfoControl.SetProgressValue(progressData.Current);
+                if (progressData.Current>0)
+                    currentThreadLogInfoControl.SetProgressValue(progressData.Current);
             }
 
             if (progressData.ProcessFinished)
@@ -234,7 +289,7 @@ namespace OracleStructExporter.WinForm
                 {
                     if (settings.LogSettings.DBLog.Enabled)
                     {
-                        var dbLogConn = settings.Connections.ConnectionsList.First(c =>
+                        var dbLogConn = settings.Connections.First(c =>
                             c.DBIdC.ToUpper() == settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
                             settings.LogSettings.DBLog.DBLogUserName.ToUpper());
                         Exporter.UpdateProcess(settings.LogSettings.DBLog.DBLogPrefix, dbLogConn, processId);
@@ -242,8 +297,43 @@ namespace OracleStructExporter.WinForm
                     btnExport.Enabled = true;
                     btnCancel.Enabled = false;
                     MessageBox.Show(progressData.Message);
+                    currentThreadLogInfoControl.EndProgressBar();
                 }
             }
+        }
+		
+		private void gridConnections_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0)
+            {
+                var connection = (Connection)gridConnections.Rows[e.RowIndex].DataBoundItem;
+                //txt.Text = connection.DBIdC;
+                txtHost.Text = connection.Host;
+                txtPort.Text = connection.Port;
+                txtSID.Text = connection.SID;
+                txtUsername.Text = connection.UserName;
+                txtPassword.Text = connection.PasswordC;
+            }
+        }
+
+        void SetAllConnections(bool value)
+        {
+            foreach (DataGridViewRow row in gridConnections.Rows)
+            {
+                var checkboxCell = row.Cells[0] as DataGridViewCheckBoxCell;
+                checkboxCell.Value = value;
+            }
+        }
+
+
+        private void btCheckAllConnections_Click(object sender, EventArgs e)
+        {
+            SetAllConnections(true);
+        }
+
+        private void btCheckNoneConnections_Click(object sender, EventArgs e)
+        {
+            SetAllConnections(false);
         }
     }
 }

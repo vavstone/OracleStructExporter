@@ -1,8 +1,11 @@
-﻿namespace OracleStructExporter.Core
+﻿using System.Xml.Serialization;
+namespace OracleStructExporter.Core
 {
     public class Connection
     {
-        internal string DbId { get; set; }
+		[XmlAttribute]
+        public string DbId { get; set; }
+        [XmlIgnore]
         public string DBIdC
         {
             get
@@ -11,7 +14,7 @@
                 return $"{Host}:{Port}/{SID}";
             }
         }
-
+        [XmlIgnore]
         public string DBIdCForFileSystem
         {
             get
@@ -20,15 +23,20 @@
                 return $"{Host.Replace(".", "_")}_{Port}_{SID}";
             }
         }
-
+		[XmlAttribute]
         public string Host { get; set; }
+		[XmlAttribute]
         public string Port { get; set; }
+		[XmlAttribute]
         public string SID { get; set; }
 
+		[XmlAttribute]
         public string UserName { get; set; }
+		[XmlAttribute]
         public string Password { get; set; }
-        internal string PasswordH { get; set; }
-
+        [XmlIgnore]
+        public string PasswordH { get; set; }
+        [XmlIgnore]
         public string PasswordC
         {
             get

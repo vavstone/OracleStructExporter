@@ -19,14 +19,7 @@ namespace OracleStructExporter.Core
         IProgress<ExportProgressData> _progressReporter;
         public event EventHandler<ExportProgressChangedEventArgs> ProgressChanged;
 
-        List<TableOrViewComment> tablesComments = new List<TableOrViewComment>();
-        List<TableOrViewComment> viewsComments = new List<TableOrViewComment>();
-        List<ColumnComment> tablesAndViewsColumnsComments = new List<ColumnComment>();
-        List<TableStruct> tablesStructs = new List<TableStruct>();
-        List<TableColumnStruct> tablesAndViewsColumnStruct = new List<TableColumnStruct>();
-        List<IndexStruct> tablesIndexes = new List<IndexStruct>();
-        List<ConstraintStruct> tablesConstraints = new List<ConstraintStruct>();
-        List<PartTables> partTables = new List<PartTables>();
+        
 
         private void OnProgressChanged(ExportProgressChangedEventArgs e)
         {
@@ -1010,6 +1003,27 @@ namespace OracleStructExporter.Core
             }
         }
 
+        public async void StartWork(List<ThreadInfo> threadInfoList)
+        {
+            // Если задача уже выполняется
+            if (_cancellationTokenSource != null)
+                throw new Exception("Задача уже выполняется");
+            try
+            {
+                _cancellationTokenSource = new CancellationTokenSource();
+                var ct = _cancellationTokenSource.Token;
+                foreach (var threadInfo in threadInfoList)
+                {
+                    Task.Run(() => StartWork(threadInfo, ct), ct);
+                }
+            }
+            finally
+            {
+                _cancellationTokenSource?.Dispose();
+                _cancellationTokenSource = null;
+            }
+        }
+
         public void CancelWork()
         {
             _cancellationTokenSource?.Cancel();
@@ -1025,6 +1039,15 @@ namespace OracleStructExporter.Core
             var currentObjectTypes = string.Empty;
             bool canceledByUser;
             var currentTime = DateTime.Now;
+
+            List<TableOrViewComment> tablesComments = new List<TableOrViewComment>();
+            List<TableOrViewComment> viewsComments = new List<TableOrViewComment>();
+            List<ColumnComment> tablesAndViewsColumnsComments = new List<ColumnComment>();
+            List<TableStruct> tablesStructs = new List<TableStruct>();
+            List<TableColumnStruct> tablesAndViewsColumnStruct = new List<TableColumnStruct>();
+            List<IndexStruct> tablesIndexes = new List<IndexStruct>();
+            List<ConstraintStruct> tablesConstraints = new List<ConstraintStruct>();
+            List<PartTables> partTables = new List<PartTables>();
 
             var progressManager = new ProgressDataManager(_progressReporter, threadInfo.ProcessId, threadInfo.Connection);
             var exportSettingsDetails = threadInfo.ExportSettings.ExportSettingsDetails;
