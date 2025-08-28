@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.OracleClient;
 using System.Linq;
+using System.Security.AccessControl;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -13,6 +14,7 @@ namespace OracleStructExporter.Core
     public class DbWorker
     {
         private OracleConnection _connection;
+        private string _connectionString;
         private ProgressDataManager _progressDataManager;
         private CancellationToken _cancellationToken;
         private string _objectNameMask;
@@ -26,6 +28,14 @@ namespace OracleStructExporter.Core
             _objectNameMask = objectNameMask;
         }
 
+        public DbWorker(string connectionString, ProgressDataManager progressDataManager, string objectNameMask, CancellationToken cancellationToken)
+        {
+            _connectionString = connectionString;
+            _progressDataManager = progressDataManager;
+            _cancellationToken = cancellationToken;
+            _objectNameMask = objectNameMask;
+        }
+
 
         public List<ObjectTypeNames> GetObjectsNames(List<string> objectTypesList, ExportProgressDataStage stage, out bool canceledByUser)
         {
@@ -34,7 +44,7 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, 0,
-                    0, true, null,0,  null, null);
+                    0, /*true,*/ null,0,  null, null);
                 return null;
             }
             canceledByUser = false;
@@ -42,7 +52,7 @@ namespace OracleStructExporter.Core
             List<ObjectTypeNames> res = new List<ObjectTypeNames>();
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, 0,
-                0, false, null, 0, null, null);
+                0, /*false,*/ null, 0, null, null);
             var counter = 0;
             foreach (var objectType in objectTypesList)
             {
@@ -67,12 +77,12 @@ namespace OracleStructExporter.Core
                 {
                     _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                         stage, null, 0,
-                        counter, false, objectType, 0, e.Message, e.StackTrace);
+                        counter, /*false,*/ objectType, 0, e.Message, e.StackTrace);
                 }
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, 0,
-                counter, false, null, counter, null, null);
+                counter, /*false,*/ null, counter, null, null);
             return res;
         }
 
@@ -113,14 +123,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
             try
             {
                 using (OracleCommand cmd = new OracleCommand(sourceQuery, _connection))
@@ -146,11 +156,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
 
 
             return sourceCode.ToString();
@@ -230,14 +240,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true, */null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects,  null, 0, null, null);
             try
             {
                 string ddlQuery = "SELECT synonym_name, table_owner, table_name, db_link  FROM user_synonyms" + GetAddObjectNameMaskWhere("synonym_name", _objectNameMask, true);
@@ -261,11 +271,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false, */null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
             return res;
         }
 
@@ -278,14 +288,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
             try
             {
                 string ddlQuery = "SELECT sequence_name, min_value, max_value, increment_by, cycle_flag, order_flag, cache_size, last_number FROM user_sequences" + GetAddObjectNameMaskWhere("sequence_name", _objectNameMask, true);
@@ -320,11 +330,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false, */null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false, */null, res.Count, null, null);
             return res;
         }
 
@@ -337,14 +347,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
             try
             {
                 string ddlQuery = "SELECT job_name, job_type, job_action, start_date, repeat_interval, end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs" + GetAddObjectNameMaskWhere("job_name", _objectNameMask, true);
@@ -398,11 +408,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
             return res;
         }
 
@@ -415,14 +425,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false, */null, 0, null, null);
             try
             {
                 string ddlQuery = "select job, what, next_date, next_sec, interval from user_jobs";
@@ -447,11 +457,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
             return res;
         }
 
@@ -464,14 +474,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
             try
             {
                 string ddlQuery = "SELECT view_name, text  FROM user_views" + GetAddObjectNameMaskWhere("view_name", _objectNameMask, true);
@@ -493,11 +503,11 @@ namespace OracleStructExporter.Core
 
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
 
             return res;
         }
@@ -511,14 +521,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, 0,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, 0,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, null, 0, null, null);
             try
             {
                 string ddlQuery = @"SELECT table_name, column_name, comments  FROM USER_COL_COMMENTS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
@@ -542,11 +552,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, 0,
-                    totalObjects, false, null, 0, e.Message,e.StackTrace);
+                    totalObjects, null, 0, e.Message,e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, 0,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
             return res;
         }
 
@@ -559,14 +569,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
             try
             {
                 string ddlQuery = @"SELECT table_name, comments  FROM USER_TAB_COMMENTS WHERE table_type=:objectType" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
@@ -589,12 +599,12 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false, */null, 0, e.Message, e.StackTrace);
             }
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
 
 
             return res;
@@ -609,14 +619,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, 0,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false, */null, 0, null, null);
             try
             {
                 string ddlQuery = @"SELECT table_name, partitioned, temporary, duration, compression, iot_type, logging, dependencies FROM USER_TABLES" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
@@ -644,11 +654,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message,e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message,e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false,*/ null, res.Count, null, null);
             return res;
         }
 
@@ -661,14 +671,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, 0,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, 0,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false, */null, 0, null, null);
             try
             {
                 var existsIdentityColumnsView = systemViewInfo["USER_TAB_IDENTITY_COLS"] != null;
@@ -737,11 +747,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, 0,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, 0,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false, */null, res.Count, null, null);
 
             return res;
         }
@@ -755,14 +765,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, /*true,*/ null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, /*false,*/ null, 0, null, null);
             try
             {
                 //USER_PART_TABLES
@@ -888,11 +898,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, /*false, */null, res.Count, null, null);
             return res;
         }
 
@@ -905,14 +915,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, 0,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, 0,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, null, 0, null, null);
             try
             {
                 if (viewNames.Any())
@@ -958,13 +968,13 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, 0,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
             }
 
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, 0,
-                totalObjects, false, infoForProgress.ToString(), res.Count, null, null);
+                totalObjects, /*false,*/ infoForProgress.ToString(), res.Count, null, null);
             return res;
         }
 
@@ -977,14 +987,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, null, 0, null, null);
             try
             {
                 string ddlQuery = @"SELECT i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality 
@@ -1063,12 +1073,12 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, null, 0, e.Message, e.StackTrace);
             }
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, null, res.Count, null, null);
             return res;
         }
 
@@ -1081,14 +1091,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, null, 0, null, null);
             try
             {
                 string ddlQuery = @"select owner, table_name, constraint_name, constraint_type, status, validated, generated, r_owner, r_constraint_name, delete_rule from USER_CONSTRAINTS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
@@ -1205,11 +1215,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                 stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, null, res.Count, null, null);
             return res;
         }
 
@@ -1222,14 +1232,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects,  null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, null, 0, null, null);
             try
             {
                 var sourceQuery = string.Format(@"SELECT name, text, line
@@ -1287,11 +1297,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, current,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, null, res.Count, null, null);
             return res;
         }
 
@@ -1304,14 +1314,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, 0,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects,  null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, null, 0,
-                totalObjects, false, null, 0, null, null);
+                totalObjects, null, 0, null, null);
             try
             {
                 string grantQuery = @"SELECT table_name, grantee, privilege, grantable, hierarchy
@@ -1343,11 +1353,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, 0,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, null, 0,
-                totalObjects, false, null, res.Count, null, null);
+                totalObjects, null, res.Count, null, null);
 
             return res;
         }
@@ -1366,14 +1376,14 @@ namespace OracleStructExporter.Core
                 canceledByUser = true;
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
                     stage, null, current,
-                    totalObjects, true, null, 0, null, null);
+                    totalObjects, null, 0, null, null);
                 return null;
             }
             canceledByUser = false;
 
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
                 stage, objectName, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects,  null, 0, null, null);
             try
             {
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
@@ -1409,11 +1419,11 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     stage, null, current,
-                    totalObjects, false, null, 0, e.Message, e.StackTrace);
+                    totalObjects, null, 0, e.Message, e.StackTrace);
             }
             _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
                 stage, objectName, current,
-                totalObjects, false, null, 0, null, null);
+                totalObjects,  null, 0, null, null);
             return ddl;
         }
 
@@ -1457,9 +1467,65 @@ namespace OracleStructExporter.Core
             {
                 _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
                     ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-                    0, false, null, 0, ex.Message, ex.StackTrace);
+                    0, null, 0, ex.Message, ex.StackTrace);
             }
             
+        }
+
+        public void SaveNewProcessInDBLog(DateTime currentDateTime, int threadsCount, string prefix, out string id)
+        {
+            id = "";
+            try
+            {
+                var query =
+                    $"insert into {prefix}PROCESS (id, connections_to_process, start_time) values ({prefix}PROCESS_seq.Nextval, {threadsCount},:start_time) returning id into :new_id";
+
+                using (OracleConnection connection = new OracleConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(query, connection))
+                    {
+                        var new_id = new OracleParameter("new_id", OracleType.Int32);
+                        new_id.Direction = ParameterDirection.ReturnValue;
+                        cmd.Parameters.Add(new_id);
+                        cmd.Parameters.Add("start_time", OracleType.DateTime).Value = currentDateTime;
+                        cmd.ExecuteNonQuery();
+                        id = new_id.Value.ToString();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
+                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
+                    0,  null, 0, ex.Message, ex.StackTrace);
+            }
+
+        }
+
+        public void UpdateProcessInDBLog(DateTime currentDateTime, string prefix, string processId)
+        {
+            try
+            {
+                var query =
+                    $"update {prefix}PROCESS set end_time=:end_time where id=:id";
+                using (OracleConnection connection = new OracleConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(query, connection))
+                    {
+                        cmd.Parameters.Add("end_time", OracleType.DateTime).Value = currentDateTime;
+                        cmd.Parameters.Add("id", OracleType.Int32).Value = processId;
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
+                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
+                    0, null, 0, ex.Message, ex.StackTrace);
+            }
         }
     }
 }

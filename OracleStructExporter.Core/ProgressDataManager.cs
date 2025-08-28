@@ -6,16 +6,21 @@ namespace OracleStructExporter.Core
 {
     public class ProgressDataManager
     {
-        List<ExportProgressData> progressDataList { get; set; } = new List<ExportProgressData>();
+        List<ExportProgressData> _progressDataList { get; set; } = new List<ExportProgressData>();
         IProgress<ExportProgressData> _progressReporter;
         private string _processId;
         private Connection _currentConnection;
+
+        public void SetProcessId(string id)
+        {
+            _processId = id;
+        }
 
         public int ErrorsCount
         {
             get
             {
-               return progressDataList.Where(c => c.Level == ExportProgressDataLevel.ERROR).Count();
+               return _progressDataList.Where(c => c.Level == ExportProgressDataLevel.ERROR).Count();
             }
         }
 
@@ -26,12 +31,12 @@ namespace OracleStructExporter.Core
             _currentConnection = currentConnection;
         }
 
-        public void ReportCurrentProgress(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, bool processFinished, string textAddInfo, int objectNumAddInfo, string error, string errorDetails)
+        public void ReportCurrentProgress(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, /*bool threadFinished,*/ string textAddInfo, int objectNumAddInfo, string error, string errorDetails)
         {
-            var item = new ExportProgressData(level, stage, objectName, current, totalObjects, processFinished, textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
+            var item = new ExportProgressData(level, stage, objectName, current, totalObjects, /*threadFinished,*/ textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
             if (level == ExportProgressDataLevel.STAGEENDINFO)
             {
-                var startItem = progressDataList.FirstOrDefault(c =>
+                var startItem = _progressDataList.FirstOrDefault(c =>
                     c.Level == ExportProgressDataLevel.STAGESTARTINFO &&
                     c.Stage == stage &&
                     (string.IsNullOrWhiteSpace(objectName) || c.ObjectName == objectName));
@@ -46,7 +51,7 @@ namespace OracleStructExporter.Core
                     item.AllProcessErrorsCount = ErrorsCount;
                 }
             }
-            progressDataList.Add(item);
+            _progressDataList.Add(item);
             _progressReporter?.Report(item);
         }
     }

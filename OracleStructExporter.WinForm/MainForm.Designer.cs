@@ -444,6 +444,7 @@
             this.txtOutputFolder.Name = "txtOutputFolder";
             this.txtOutputFolder.Size = new System.Drawing.Size(647, 20);
             this.txtOutputFolder.TabIndex = 27;
+            this.txtOutputFolder.Text = "e:\\tmp\\10";
             // 
             // lblOutputFolder
             // 

@@ -216,23 +216,12 @@ namespace OracleStructExporter.WinForm
             exporter = new Exporter();
             exporter.ProgressChanged += ProgressChanged;
 
+
             
 
-            if (settings.LogSettings.DBLog.Enabled)
-            {
-                var dbLogConn = settings.Connections.First(c =>
-                    c.DBIdC.ToUpper() == settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
-                    settings.LogSettings.DBLog.DBLogUserName.ToUpper());
-                Exporter.SetNewProcess(settings.LogSettings.DBLog.DBLogPrefix, dbLogConn, out processId);
-            }
-            else
-            {
-                processId = "NONE";
-            }
+            
 
-            threads.ForEach(c=>c.ProcessId = processId);
-
-            exporter.StartWork(threads);
+            exporter.StartWork(settings, threads);
 
             //foreach (var thread in threads)
             //{
@@ -253,51 +242,66 @@ namespace OracleStructExporter.WinForm
         {
             var progressData = e.Progress;
             string message;
-            logger.InsertTextFileLog(progressData, true, out message);
-            logger.InsertDBLog(progressData, true);
 
-            var currentThreadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
-                c.Connection.DBIdC.ToUpper() == progressData.CurrentConnection.DBIdC.ToUpper() &&
-                c.Connection.UserName.ToUpper() == progressData.CurrentConnection.UserName.ToUpper());
-
-            if (!string.IsNullOrWhiteSpace(message))
+            if (progressData.IsProgressFromMainProcess)
             {
-                // Обновление прогресса
-                currentThreadLogInfoControl.SetProgressStatus($"Выгружено: {progressData.Current}, " +
-                                         $"осталось выгрузить: {progressData.TotalObjects - progressData.Current}");
-               currentThreadLogInfoControl.AppendText(message);
-                currentThreadLogInfoControl.SetLblStatus(progressData.Message);
-                // Для ProgressBar: меняем стиль, если это первый прогресс
-                currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.TotalObjects);
-                // Обновление значения прогресс-бара
-                if (progressData.Current>0)
-                    currentThreadLogInfoControl.SetProgressValue(progressData.Current);
-            }
+                //TODO сообщения от главного процесса
 
-            if (progressData.ProcessFinished)
-            {
-
-                if (progressData.Level != ExportProgressDataLevel.ERROR &&
-                    progressData.Level != ExportProgressDataLevel.CANCEL)
+                if (progressData.ProcessFinished)
                 {
-                    currentThreadLogInfoControl.SetLblStatus("Готово");
-                }
-
-                var currentThread = threads.First(c => c.Connection == progressData.CurrentConnection);
-                currentThread.Finished = true;
-                if (threads.All(c => c.Finished))
-                {
-                    if (settings.LogSettings.DBLog.Enabled)
-                    {
-                        var dbLogConn = settings.Connections.First(c =>
-                            c.DBIdC.ToUpper() == settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
-                            settings.LogSettings.DBLog.DBLogUserName.ToUpper());
-                        Exporter.UpdateProcess(settings.LogSettings.DBLog.DBLogPrefix, dbLogConn, processId);
-                    }
                     btnExport.Enabled = true;
                     btnCancel.Enabled = false;
                     MessageBox.Show(progressData.Message);
+                }
+            }
+            else
+            {
+                //сообщения от потоков
+                logger.InsertThreadsTextFileLog(progressData, true, out message);
+                logger.InsertThreadsDBLog(progressData, true);
+
+                var currentThreadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
+                    c.Connection.DBIdC.ToUpper() == progressData.CurrentConnection.DBIdC.ToUpper() &&
+                    c.Connection.UserName.ToUpper() == progressData.CurrentConnection.UserName.ToUpper());
+
+                if (!string.IsNullOrWhiteSpace(message))
+                {
+                    // Обновление прогресса
+                    currentThreadLogInfoControl.SetProgressStatus($"Выгружено: {progressData.Current}, " +
+                                             $"осталось выгрузить: {progressData.TotalObjects - progressData.Current}");
+                    currentThreadLogInfoControl.AppendText(message);
+                    currentThreadLogInfoControl.SetLblStatus(progressData.Message);
+                    // Для ProgressBar: меняем стиль, если это первый прогресс
+                    currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.TotalObjects);
+                    // Обновление значения прогресс-бара
+                    if (progressData.Current > 0)
+                        currentThreadLogInfoControl.SetProgressValue(progressData.Current);
+                }
+
+                if (progressData.ThreadFinished)
+                {
+                    if (progressData.Level == ExportProgressDataLevel.CANCEL)
+                        currentThreadLogInfoControl.SetLblStatus("Поток прерван");
+                    else if (progressData.Level == ExportProgressDataLevel.ERROR)
+                        currentThreadLogInfoControl.SetLblStatus("Ошибка работы потока");
+                    else
+                        currentThreadLogInfoControl.SetLblStatus("Готово");
+
+
+                    //var currentThread = threads.First(c => c.Connection == progressData.CurrentConnection);
+                    //currentThread.Finished = true;
+                    //if (threads.All(c => c.Finished))
+                    //{
+                    //    if (settings.LogSettings.DBLog.Enabled)
+                    //    {
+                    //        var dbLogConn = settings.Connections.First(c =>
+                    //            c.DBIdC.ToUpper() == settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
+                    //            settings.LogSettings.DBLog.DBLogUserName.ToUpper());
+                    //        Exporter.UpdateProcess(settings.LogSettings.DBLog.DBLogPrefix, dbLogConn, processId);
+                    //    }
+                    
                     currentThreadLogInfoControl.EndProgressBar();
+                    //}
                 }
             }
         }

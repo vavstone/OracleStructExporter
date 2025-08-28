@@ -37,7 +37,7 @@ namespace OracleStructExporter.Core
             return true;
         }
 
-        public void InsertTextFileLog(ExportProgressData progressData, bool checkOnNecessaryBySettings,
+        public void InsertThreadsTextFileLog(ExportProgressData progressData, bool checkOnNecessaryBySettings,
             out string messageText)
         {
             messageText = "";
@@ -91,7 +91,7 @@ namespace OracleStructExporter.Core
             }
         }
 
-        public void InsertDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
+        public void InsertThreadsDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
         {
             //TODO реализовать
         }

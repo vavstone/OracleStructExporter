@@ -50,6 +50,7 @@
     <Compile Include="DBStructs\SchedulerJobArgument.cs" />
     <Compile Include="DBStructs\SchedulerJob.cs" />
     <Compile Include="DBStructs\TableIdentityColumnStruct.cs" />
+    <Compile Include="DDLCreator.cs" />
     <Compile Include="ExportProgressDataLevel.cs" />
     <Compile Include="ExportProgressDataStage.cs" />
     <Compile Include="Logger.cs" />

@@ -29,6 +29,14 @@ namespace OracleStructExporter.Core
                 if (Level == ExportProgressDataLevel.ERROR) return $"Ошибка{objectAddStr}! {Error}";
                 if (Level == ExportProgressDataLevel.CANCEL) return "Операция отменена пользователем!";
 
+                //TODO добавить информации
+                if (Stage == ExportProgressDataStage.PROCESS_MAIN)
+                {
+                    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
+                        return $"Запуск работы...";
+                    return $"Завершение работы {DurationString}";
+                }
+
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
@@ -233,8 +241,31 @@ namespace OracleStructExporter.Core
                 return TextAddInfo;
             }
         }
-    
-        public bool ProcessFinished { get; set; }
+
+        public bool ThreadFinished
+        {
+            get
+            {
+                return (Stage == ExportProgressDataStage.PROCESS_SCHEMA && Level == ExportProgressDataLevel.STAGEENDINFO) || Level == ExportProgressDataLevel.CANCEL;
+            }
+        }
+
+        public bool ProcessFinished
+        {
+            get
+            {
+                return (Stage == ExportProgressDataStage.PROCESS_MAIN && Level == ExportProgressDataLevel.STAGEENDINFO) || Level == ExportProgressDataLevel.CANCEL;
+            }
+        }
+
+        public bool IsProgressFromMainProcess
+        {
+            get
+            {
+                return (Stage == ExportProgressDataStage.PROCESS_MAIN);
+            } 
+        
+        }
 
         public DateTime EventTime { get; set; }
         public string EventId { get; set; }
@@ -299,14 +330,14 @@ namespace OracleStructExporter.Core
             EventId = Guid.NewGuid().ToString();
         }
 
-        public ExportProgressData(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, bool processFinished, string textAddInfo, int objectNumAddInfo, string processId, Connection currentConnection, string error, string errorDetails) : this()
+        public ExportProgressData(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, /*bool threadFinished,*/ string textAddInfo, int objectNumAddInfo, string processId, Connection currentConnection, string error, string errorDetails) : this()
         {
             Level = level;
             Stage = stage;
             ObjectName = objectName;
             Current = current;
             TotalObjects = totalObjects;
-            ProcessFinished = processFinished;
+            //ThreadFinished = threadFinished;
             TextAddInfo = textAddInfo;
             ObjectNumAddInfo = objectNumAddInfo;
             Error = error;
