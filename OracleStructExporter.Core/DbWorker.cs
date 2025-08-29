@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.OracleClient;
 using System.Linq;
+using System.Reflection;
 using System.Security.AccessControl;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -39,20 +40,21 @@ namespace OracleStructExporter.Core
 
         public List<ObjectTypeNames> GetObjectsNames(List<string> objectTypesList, ExportProgressDataStage stage, out bool canceledByUser)
         {
+            
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, 0,
-                    0, /*true,*/ null,0,  null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
             List<ObjectTypeNames> res = new List<ObjectTypeNames>();
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, 0,
-                0, /*false,*/ null, 0, null, null);
+            
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            _progressDataManager.ReportCurrentProgress(progressData);
+            
             var counter = 0;
             foreach (var objectType in objectTypesList)
             {
@@ -75,14 +77,18 @@ namespace OracleStructExporter.Core
                 }
                 catch (Exception e)
                 {
-                    _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                        stage, null, 0,
-                        counter, /*false,*/ objectType, 0, e.Message, e.StackTrace);
+                    var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                    progressDataErr.Error = e.Message;
+                    progressDataErr.ErrorDetails = e.StackTrace;
+                    _progressDataManager.ReportCurrentProgress(progressDataErr);
                 }
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, 0,
-                counter, /*false,*/ null, counter, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.SchemaObjCountPlan = counter;
+            progressData2.MetaObjCountFact = counter;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
@@ -107,7 +113,7 @@ namespace OracleStructExporter.Core
             return objectTypeMapping[objectTypeCommonName];
         }
 
-        public string GetObjectSource(string objectName, string objectType, List<string> addSlashTo, ExportProgressDataStage stage, int totalObjects, int current,out bool canceledByUser)
+        public string GetObjectSource(string objectName, string objectType, List<string> addSlashTo, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current,out bool canceledByUser)
         {
             string dbObjectType = GetObjectTypeName(objectType);
             const string sourceQuery = @"
@@ -121,16 +127,23 @@ namespace OracleStructExporter.Core
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                progressDataCancel.ObjectName = objectName;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            progressData.ObjectName = objectName;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 using (OracleCommand cmd = new OracleCommand(sourceQuery, _connection))
@@ -154,13 +167,23 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                progressDataErr.ObjectName = objectName;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = 1;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            progressData2.ObjectName = objectName;
+            _progressDataManager.ReportCurrentProgress(progressData2);
 
 
             return sourceCode.ToString();
@@ -231,23 +254,29 @@ namespace OracleStructExporter.Core
             }
         }
 
-        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<SynonymAttributes>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true, */null, 0, null, null);
+
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
+
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects,  null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
                 string ddlQuery = "SELECT synonym_name, table_owner, table_name, db_link  FROM user_synonyms" + GetAddObjectNameMaskWhere("synonym_name", _objectNameMask, true);
@@ -269,33 +298,47 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false, */null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public List<SequenceAttributes> GetSequences(ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<SequenceAttributes> GetSequences(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<SequenceAttributes>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = "SELECT sequence_name, min_value, max_value, increment_by, cycle_flag, order_flag, cache_size, last_number FROM user_sequences" + GetAddObjectNameMaskWhere("sequence_name", _objectNameMask, true);
@@ -328,33 +371,47 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false, */null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false, */null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<SchedulerJob>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = "SELECT job_name, job_type, job_action, start_date, repeat_interval, end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs" + GetAddObjectNameMaskWhere("job_name", _objectNameMask, true);
@@ -406,33 +463,47 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<DBMSJob>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
+
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false, */null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
                 string ddlQuery = "select job, what, next_date, next_sec, interval from user_jobs";
@@ -455,33 +526,47 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public Dictionary<string,string> GetViews(ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public Dictionary<string,string> GetViews(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new Dictionary<string, string>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = "SELECT view_name, text  FROM user_views" + GetAddObjectNameMaskWhere("view_name", _objectNameMask, true);
@@ -501,34 +586,43 @@ namespace OracleStructExporter.Core
             catch (Exception e)
             {
 
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<ColumnComment> GetTablesAndViewsColumnComments(ExportProgressDataStage stage, int totalObjects, out bool canceledByUser)
+        public List<ColumnComment> GetTablesAndViewsColumnComments(ExportProgressDataStage stage, int schemaObjCountPlan, out bool canceledByUser)
         {
             var res = new List<ColumnComment>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, 0,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, 0,
-                totalObjects, null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = @"SELECT table_name, column_name, comments  FROM USER_COL_COMMENTS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
@@ -550,33 +644,42 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, 0,
-                    totalObjects, null, 0, e.Message,e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, 0,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<TableOrViewComment>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
                 string ddlQuery = @"SELECT table_name, comments  FROM USER_TAB_COMMENTS WHERE table_type=:objectType" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
@@ -597,36 +700,48 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false, */null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
 
 
             return res;
         }
 
-        public List<TableStruct> GetTablesStruct (ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<TableStruct> GetTablesStruct (ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<TableStruct>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, 0,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false, */null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = @"SELECT table_name, partitioned, temporary, duration, compression, iot_type, logging, dependencies FROM USER_TABLES" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
@@ -652,33 +767,41 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, /*false,*/ null, 0, e.Message,e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, res.Count, null, null);
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
             return res;
         }
 
-        public List<TableColumnStruct> GetTablesAndViewsColumnsStruct(ExportProgressDataStage stage, int totalObjects, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
+        public List<TableColumnStruct> GetTablesAndViewsColumnsStruct(ExportProgressDataStage stage, int schemaObjCountPlan, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
         {
             var res = new List<TableColumnStruct>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, 0,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, 0,
-                totalObjects, /*false, */null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 var existsIdentityColumnsView = systemViewInfo["USER_TAB_IDENTITY_COLS"] != null;
@@ -745,34 +868,43 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, 0,
-                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, 0,
-                totalObjects, /*false, */null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<PartTables> GetTablesPartitions(bool ExtractOnlyDefParts, ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<PartTables> GetTablesPartitions(bool ExtractOnlyDefParts, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<PartTables>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, /*true,*/ null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, /*false,*/ null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 //USER_PART_TABLES
@@ -896,33 +1028,41 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, /*false, */null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public Dictionary<string,List<string>> GetInfoAboutSystemViews(List<string> viewNames, ExportProgressDataStage stage, int totalObjects, out bool canceledByUser)
+        public Dictionary<string,List<string>> GetInfoAboutSystemViews(List<string> viewNames, ExportProgressDataStage stage, out bool canceledByUser)
         {
             var res = new Dictionary<string, List<string>>();
             var infoForProgress = new StringBuilder();
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, 0,
-                    totalObjects, null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, 0,
-                totalObjects, null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 if (viewNames.Any())
@@ -966,35 +1106,42 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, 0,
-                    totalObjects, /*false,*/ null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, 0,
-                totalObjects, /*false,*/ infoForProgress.ToString(), res.Count, null, null);
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public List<IndexStruct> GetTablesIndexes(ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<IndexStruct> GetTablesIndexes(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<IndexStruct>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = @"SELECT i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality 
@@ -1071,34 +1218,47 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, null, res.Count, null, null);
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public List<ConstraintStruct> GetTablesConstraints(string schemaName, ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public List<ConstraintStruct> GetTablesConstraints(string schemaName, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new List<ConstraintStruct>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string ddlQuery = @"select owner, table_name, constraint_name, constraint_type, status, validated, generated, r_owner, r_constraint_name, delete_rule from USER_CONSTRAINTS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
@@ -1213,33 +1373,47 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                stage, null, current,
-                    totalObjects, null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return res;
         }
 
-        public Dictionary<string, string> GetObjectsSourceByType(string objectType, string schemaName,ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public Dictionary<string, string> GetObjectsSourceByType(string objectType, string schemaName,ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var res = new Dictionary<string, string>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects,  null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, current,
-                totalObjects, null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 var sourceQuery = string.Format(@"SELECT name, text, line
@@ -1295,33 +1469,41 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, current,
-                totalObjects, null, res.Count, null, null);
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            _progressDataManager.ReportCurrentProgress(progressData2);
             return res;
         }
 
-        public List<GrantAttributes> GetAllObjectsGrants(string schemaName, List<string> skipGrantOptions, ExportProgressDataStage stage, int totalObjects, out bool canceledByUser)
+        public List<GrantAttributes> GetAllObjectsGrants(string schemaName, List<string> skipGrantOptions, ExportProgressDataStage stage, int schemaObjCountPlan, out bool canceledByUser)
         {
             var res = new List<GrantAttributes>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, 0,
-                    totalObjects,  null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, null, 0,
-                totalObjects, null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 string grantQuery = @"SELECT table_name, grantee, privilege, grantable, hierarchy
@@ -1351,18 +1533,22 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, 0,
-                    totalObjects, null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, null, 0,
-                totalObjects, null, res.Count, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = res.Count;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public string GetObjectDdl(string objectType, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStage stage, int totalObjects, int current, out bool canceledByUser)
+        public string GetObjectDdl(string objectType, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var ddl = "";
             string ddlQuery = @"
@@ -1374,16 +1560,23 @@ namespace OracleStructExporter.Core
             if (_cancellationToken.IsCancellationRequested)
             {
                 canceledByUser = true;
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    stage, null, current,
-                    totalObjects, null, 0, null, null);
+                var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
+                progressDataCancel.Current = current;
+                progressDataCancel.ObjectName = objectName;
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                stage, objectName, current,
-                totalObjects,  null, 0, null, null);
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.TypeObjCountPlan = typeObjCountPlan;
+            progressData.Current = current;
+            progressData.ObjectName = objectName;
+            _progressDataManager.ReportCurrentProgress(progressData);
+
             try
             {
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
@@ -1417,13 +1610,24 @@ namespace OracleStructExporter.Core
             }
             catch (Exception e)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    stage, null, current,
-                    totalObjects, null, 0, e.Message, e.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.TypeObjCountPlan = typeObjCountPlan;
+                progressDataErr.Current = current;
+                progressDataErr.ObjectName = objectName;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-            _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                stage, objectName, current,
-                totalObjects,  null, 0, null, null);
+
+            var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = 1;
+            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.TypeObjCountPlan = typeObjCountPlan;
+            progressData2.Current = current;
+            progressData2.ObjectName = objectName;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+
             return ddl;
         }
 
@@ -1465,9 +1669,10 @@ namespace OracleStructExporter.Core
             }
             catch (Exception ex)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-                    0, null, 0, ex.Message, ex.StackTrace);
+                var progressData = new ExportProgressData(ExportProgressDataLevel.ERROR, ExportProgressDataStage.PROCESS_SCHEMA);
+                progressData.Error = ex.Message;
+                progressData.ErrorDetails = ex.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressData);
             }
             
         }
@@ -1496,11 +1701,11 @@ namespace OracleStructExporter.Core
             }
             catch (Exception ex)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-                    0,  null, 0, ex.Message, ex.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, ExportProgressDataStage.PROCESS_MAIN);
+                progressDataErr.Error = ex.Message;
+                progressDataErr.ErrorDetails = ex.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
-
         }
 
         public void UpdateProcessInDBLog(DateTime currentDateTime, string prefix, string processId)
@@ -1522,9 +1727,50 @@ namespace OracleStructExporter.Core
             }
             catch (Exception ex)
             {
-                _progressDataManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-                    0, null, 0, ex.Message, ex.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, ExportProgressDataStage.PROCESS_MAIN);
+                progressDataErr.Error = ex.Message;
+                progressDataErr.ErrorDetails = ex.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
+                //TODO посчитать количество по всем потокам
+                //progressData.ProcessObjCountPlan = X;
+                //progressData.ProcessObjCountFact = X;
+            }
+        }
+
+        public void SaveConnWorkLogInDB(DateTime currentDateTime, string prefix, ExportProgressData progressData)
+        {
+            try
+            {
+                var query =
+                    $"insert into {prefix}CONNWORKLOG (id, process_id, dbid, username, stage, eventlevel, eventid, eventtime, message, objectscount, errorscount) values " +
+                    $"({prefix}CONNWORKLOG_seq.Nextval, :process_id, :dbid, :username, :stage, :eventlevel, :eventid, :eventtime, :message, :objectscount, :errorscount)";
+
+                using (OracleConnection connection = new OracleConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(query, connection))
+                    {
+                        //TODO уточнить параметры
+                        cmd.Parameters.Add("process_id", OracleType.Number).Value = int.Parse(progressData.ProcessId);
+                        //cmd.Parameters.Add("dbid", OracleType.VarChar).Value = progressData.;
+                        cmd.Parameters.Add("username", OracleType.VarChar).Value = progressData.ProcessId;
+                        cmd.Parameters.Add("stage", OracleType.VarChar).Value = progressData.Stage.ToString();
+                        cmd.Parameters.Add("eventlevel", OracleType.VarChar).Value = progressData.Level.ToString();
+                        cmd.Parameters.Add("eventid", OracleType.VarChar).Value = progressData.EventId;
+                        cmd.Parameters.Add("eventtime", OracleType.DateTime).Value = progressData.EventTime;
+                        cmd.Parameters.Add("message", OracleType.VarChar).Value = progressData.Message;
+                        //cmd.Parameters.Add("objectscount", OracleType.Number).Value = progressData.o;
+                        //cmd.Parameters.Add("errorscount", OracleType.Number).Value = progressData.o;
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, progressData.Stage);
+                progressDataErr.Error = ex.Message;
+                progressDataErr.ErrorDetails = ex.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
         }
     }

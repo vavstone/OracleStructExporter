@@ -31,28 +31,73 @@ namespace OracleStructExporter.Core
             _currentConnection = currentConnection;
         }
 
-        public void ReportCurrentProgress(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, /*bool threadFinished,*/ string textAddInfo, int objectNumAddInfo, string error, string errorDetails)
+        public void ReportCurrentProgress(ExportProgressData progressData)
         {
-            var item = new ExportProgressData(level, stage, objectName, current, totalObjects, /*threadFinished,*/ textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
-            if (level == ExportProgressDataLevel.STAGEENDINFO)
+            //var progressData = new ExportProgressData(level, stage, objectName, current, totalObjects, /*threadFinished,*/ textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
+
+            if (progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
             {
                 var startItem = _progressDataList.FirstOrDefault(c =>
                     c.Level == ExportProgressDataLevel.STAGESTARTINFO &&
-                    c.Stage == stage &&
-                    (string.IsNullOrWhiteSpace(objectName) || c.ObjectName == objectName));
+                    c.Stage == progressData.Stage &&
+                    (string.IsNullOrWhiteSpace(progressData.ObjectName) || c.ObjectName == progressData.ObjectName));
                 if (startItem != null)
                 {
-                    item.StartStageProgressData = startItem;
+                    progressData.StartStageProgressData = startItem;
                 }
 
-                if (stage == ExportProgressDataStage.PROCESS_SCHEMA)
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_MAIN)
                 {
-                    //cумма по ошибкам всей выгрузки
-                    item.AllProcessErrorsCount = ErrorsCount;
+                    //TODO cумма по ошибкам всей выгрузки
+                    //progressData.ErrorsCount =  
+                }
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA)
+                {
+                    //TODO cумма по ошибкам выгрузки схемы
+                    //progressData.ErrorsCount =  
+                }
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
+                {
+                    //TODO cумма по ошибкам выгрузки типа
+                    //progressData.ErrorsCount =  
+                }
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT)
+                {
+                    //TODO cумма по ошибкам выгрузки объекта
+                    //progressData.ErrorsCount =  
                 }
             }
-            _progressDataList.Add(item);
-            _progressReporter?.Report(item);
+            _progressDataList.Add(progressData);
+            _progressReporter?.Report(progressData);
         }
+
+        //public void ReportCurrentProgressOld(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, /*bool threadFinished,*/ string textAddInfo, int objectNumAddInfo, string error, string errorDetails)
+        //{
+        //    var item = new ExportProgressData(level, stage, objectName, current, totalObjects, /*threadFinished,*/ textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
+        //    if (level == ExportProgressDataLevel.STAGEENDINFO)
+        //    {
+        //        var startItem = _progressDataList.FirstOrDefault(c =>
+        //            c.Level == ExportProgressDataLevel.STAGESTARTINFO &&
+        //            c.Stage == stage &&
+        //            (string.IsNullOrWhiteSpace(objectName) || c.ObjectName == objectName));
+        //        if (startItem != null)
+        //        {
+        //            item.StartStageProgressData = startItem;
+        //        }
+
+        //        if (stage == ExportProgressDataStage.PROCESS_SCHEMA)
+        //        {
+        //            //cумма по ошибкам всей выгрузки
+        //            item.AllProcessErrorsCount = ErrorsCount;
+        //        }
+        //    }
+
+        //    //if (level == ExportProgressDataLevel.CANCEL)
+        //    //{
+        //    //    var k = stage;
+        //    //}
+        //    _progressDataList.Add(item);
+        //    _progressReporter?.Report(item);
+        //}
     }
 }

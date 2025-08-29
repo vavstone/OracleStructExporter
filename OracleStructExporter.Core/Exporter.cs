@@ -6,6 +6,7 @@ using System.Data.OracleClient;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -154,8 +155,8 @@ namespace OracleStructExporter.Core
             
 
 
-            try
-            {
+            //try
+            //{
                 _cancellationTokenSource = new CancellationTokenSource();
                 var ct = _cancellationTokenSource.Token;
 
@@ -183,12 +184,12 @@ namespace OracleStructExporter.Core
                 {
                     Task.Run(() => StartWork(threadInfo, ct), ct);
                 }
-            }
-            finally
-            {
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
-            }
+            //}
+            //finally
+            //{
+            //    _cancellationTokenSource?.Dispose();
+            //    _cancellationTokenSource = null;
+            //}
         }
 
         public void CancelWork()
@@ -197,13 +198,15 @@ namespace OracleStructExporter.Core
         }
 
 
-        public async void StartWork(ThreadInfo threadInfo, CancellationToken ct)
+        void ProcessSchema(ThreadInfo threadInfo, CancellationToken ct, ProgressDataManager progressManager, out int schemaObjectsCountPlan, out int schemaObjectsCountFact)
         {
+            schemaObjectsCountPlan = 0;
+            //TODO считать общее кол-во успешно обработанных
+            schemaObjectsCountFact = 0;
 
-            var totalObjectsToProcess = 0;
             var currentObjectNumber = 0;
-            var currentObjectName = string.Empty;
-            var currentObjectTypes = string.Empty;
+            //var currentObjectName = string.Empty;
+            //var currentObjectTypes = string.Empty;
             bool canceledByUser;
             //var currentTime = DateTime.Now;
 
@@ -216,8 +219,7 @@ namespace OracleStructExporter.Core
             List<ConstraintStruct> tablesConstraints = new List<ConstraintStruct>();
             List<PartTables> partTables = new List<PartTables>();
 
-            var progressManager =
-                new ProgressDataManager(_progressReporter, threadInfo.ProcessId, threadInfo.Connection);
+
             var exportSettingsDetails = threadInfo.ExportSettings.ExportSettingsDetails;
             var settingsConnection = threadInfo.Connection;
             var objectNameMask = exportSettingsDetails.MaskForFileNames?.Include;
@@ -232,18 +234,16 @@ namespace OracleStructExporter.Core
             var currentSchemaDescr =
                 $"{settingsConnection.UserName}@{settingsConnection.Host}:{settingsConnection.Port}/{settingsConnection.SID}";
 
-            if (ct.IsCancellationRequested)
-            {
-                progressManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-                    0,  null, 0, null, null);
-                return;
-            }
+            //if (ct.IsCancellationRequested)
+            //{
+            //    progressManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
+            //        ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
+            //        0, null, 0, null, null);
+            //    return;
+            //}
 
-            progressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                ExportProgressDataStage.PROCESS_SCHEMA, currentObjectName, currentObjectNumber,
-                totalObjectsToProcess,  currentSchemaDescr, 0, null, null);
-
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStage.PROCESS_SCHEMA);
+            progressManager.ReportCurrentProgress(progressData);
 
             try
             {
@@ -277,7 +277,7 @@ namespace OracleStructExporter.Core
                     };
 
                     var systemViewInfo = dbWorker.GetInfoAboutSystemViews(systemViewsToCheck,
-                        ExportProgressDataStage.GET_INFO_ABOUT_SYS_VIEW, totalObjectsToProcess, out canceledByUser);
+                        ExportProgressDataStage.GET_INFO_ABOUT_SYS_VIEW, out canceledByUser);
                     if (canceledByUser) return;
 
                     dbWorker.SetSessionTransform(exportSettingsDetails.SessionTransformC);
@@ -288,25 +288,23 @@ namespace OracleStructExporter.Core
                         ExportProgressDataStage.GET_OBJECTS_NAMES, out canceledByUser);
                     if (canceledByUser) return;
 
-                    totalObjectsToProcess = namesList.Sum(c => c.ObjectNames.Count);
+                    schemaObjectsCountPlan = namesList.Sum(c => c.ObjectNames.Count);
 
 
 
                     var grants = dbWorker.GetAllObjectsGrants(userId, exportSettingsDetails.SkipGrantOptionsC,
-                        ExportProgressDataStage.GET_GRANTS, totalObjectsToProcess, out canceledByUser);
+                        ExportProgressDataStage.GET_GRANTS, schemaObjectsCountPlan, out canceledByUser);
                     if (canceledByUser) return;
 
                     if (objectTypesToProcess.Contains("TABLES") || objectTypesToProcess.Contains("VIEWS"))
                     {
-
-
                         tablesAndViewsColumnStruct = dbWorker.GetTablesAndViewsColumnsStruct(
-                            ExportProgressDataStage.GET_COLUMNS, totalObjectsToProcess, systemViewInfo,
+                            ExportProgressDataStage.GET_COLUMNS, schemaObjectsCountPlan, systemViewInfo,
                             out canceledByUser);
                         if (canceledByUser) return;
 
                         tablesAndViewsColumnsComments = dbWorker.GetTablesAndViewsColumnComments(
-                            ExportProgressDataStage.GET_COLUMNS_COMMENTS, totalObjectsToProcess, out canceledByUser);
+                            ExportProgressDataStage.GET_COLUMNS_COMMENTS, schemaObjectsCountPlan, out canceledByUser);
                         if (canceledByUser) return;
                     }
 
@@ -325,50 +323,60 @@ namespace OracleStructExporter.Core
 
                     foreach (var objectType in objectTypesToProcess)
                     {
+                        int currentTypeObjectsCounter = 0;
+                        var currentType = namesList.FirstOrDefault(c => c.ObjectType == objectType);
+                        var curentNamesList = currentType.ObjectNames;
+                        var typeObjCountPlan = curentNamesList.Count;
                         try
                         {
-                            currentObjectTypes = objectType;
+                            //currentObjectTypes = objectType;
                             string dbObjectType = DbWorker.GetObjectTypeName(objectType);
+                            
+                            
 
-                            progressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                                ExportProgressDataStage.PROCESS_OBJECT_TYPE, currentObjectName, currentObjectNumber,
-                                totalObjectsToProcess,  currentObjectTypes, 0, null, null);
+                            var progressDataForType = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStage.PROCESS_OBJECT_TYPE);
+                            progressDataForType.SchemaObjCountPlan = schemaObjectsCountPlan;
+                            progressDataForType.TypeObjCountPlan = typeObjCountPlan;
+                            progressDataForType.Current = currentObjectNumber;
+                            progressDataForType.ObjectType = objectType;
+                            progressManager.ReportCurrentProgress(progressData);
+
 
                             if (objectType == "SYNONYMS")
                             {
                                 synonymsStructs = dbWorker.GetSynonyms(ExportProgressDataStage.GET_SYNONYMS,
-                                    totalObjectsToProcess, currentObjectNumber, out canceledByUser);
+                                    schemaObjectsCountPlan, typeObjCountPlan,  currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
 
                             if (objectType == "SEQUENCES")
                             {
                                 sequencesStructs = dbWorker.GetSequences(ExportProgressDataStage.GET_SEQUENCES,
-                                    totalObjectsToProcess, currentObjectNumber, out canceledByUser);
+                                    schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
 
                             if (objectType == "JOBS")
                             {
                                 schedulerJobsStructs = dbWorker.GetSchedulerJobs(
-                                    ExportProgressDataStage.GET_SCHEDULER_JOBS, totalObjectsToProcess,
+                                    ExportProgressDataStage.GET_SCHEDULER_JOBS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                                 dbmsJobsStructs = dbWorker.GetDBMSJobs(ExportProgressDataStage.GET_DMBS_JOBS,
-                                    totalObjectsToProcess, currentObjectNumber, out canceledByUser);
+                                    schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
 
                             if (objectType == "PACKAGES")
                             {
                                 packagesHeaders = dbWorker.GetObjectsSourceByType("PACKAGE", userId,
-                                    ExportProgressDataStage.GET_PACKAGES_HEADERS, totalObjectsToProcess,
+                                    ExportProgressDataStage.GET_PACKAGES_HEADERS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
 
                                 packagesBodies =
                                     dbWorker.GetObjectsSourceByType("PACKAGE BODY", userId,
-                                        ExportProgressDataStage.GET_PACKAGES_BODIES, totalObjectsToProcess,
+                                        ExportProgressDataStage.GET_PACKAGES_BODIES, schemaObjectsCountPlan, typeObjCountPlan,
                                         currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
@@ -376,7 +384,7 @@ namespace OracleStructExporter.Core
                             if (objectType == "FUNCTIONS")
                             {
                                 functionsText = dbWorker.GetObjectsSourceByType(DbWorker.GetObjectTypeName(objectType),
-                                    userId, ExportProgressDataStage.GET_FUNCTIONS, totalObjectsToProcess,
+                                    userId, ExportProgressDataStage.GET_FUNCTIONS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
@@ -384,7 +392,7 @@ namespace OracleStructExporter.Core
                             if (objectType == "PROCEDURES")
                             {
                                 proceduresText = dbWorker.GetObjectsSourceByType(DbWorker.GetObjectTypeName(objectType),
-                                    userId, ExportProgressDataStage.GET_PROCEDURES, totalObjectsToProcess,
+                                    userId, ExportProgressDataStage.GET_PROCEDURES, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
@@ -392,7 +400,7 @@ namespace OracleStructExporter.Core
                             if (objectType == "TRIGGERS")
                             {
                                 triggersText = dbWorker.GetObjectsSourceByType(DbWorker.GetObjectTypeName(objectType),
-                                    userId, ExportProgressDataStage.GET_TRIGGERS, totalObjectsToProcess,
+                                    userId, ExportProgressDataStage.GET_TRIGGERS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
@@ -400,7 +408,7 @@ namespace OracleStructExporter.Core
                             if (objectType == "TYPES")
                             {
                                 typesText = dbWorker.GetObjectsSourceByType(DbWorker.GetObjectTypeName(objectType),
-                                    userId, ExportProgressDataStage.GET_TYPES, totalObjectsToProcess,
+                                    userId, ExportProgressDataStage.GET_TYPES, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
@@ -409,26 +417,26 @@ namespace OracleStructExporter.Core
                             {
 
                                 tablesConstraints = dbWorker.GetTablesConstraints(userId,
-                                    ExportProgressDataStage.GET_TABLE_CONSTRAINTS, totalObjectsToProcess,
+                                    ExportProgressDataStage.GET_TABLE_CONSTRAINTS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
 
                                 tablesStructs = dbWorker.GetTablesStruct(ExportProgressDataStage.GET_TABLES_STRUCTS,
-                                    totalObjectsToProcess, currentObjectNumber, out canceledByUser);
+                                    schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
 
                                 tablesIndexes = dbWorker.GetTablesIndexes(ExportProgressDataStage.GET_TABLES_INDEXES,
-                                    totalObjectsToProcess, currentObjectNumber, out canceledByUser);
+                                    schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
 
                                 tablesComments =
                                     dbWorker.GetTableOrViewComments(dbObjectType,
-                                        ExportProgressDataStage.GET_TABLES_COMMENTS, totalObjectsToProcess,
+                                        ExportProgressDataStage.GET_TABLES_COMMENTS, schemaObjectsCountPlan, typeObjCountPlan,
                                         currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
 
                                 partTables = dbWorker.GetTablesPartitions(exportSettingsDetails.ExtractOnlyDefPart,
-                                    ExportProgressDataStage.GET_TABLES_PARTS, totalObjectsToProcess,
+                                    ExportProgressDataStage.GET_TABLES_PARTS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
@@ -436,20 +444,18 @@ namespace OracleStructExporter.Core
                             if (objectType == "VIEWS")
                             {
 
-                                viewsText = dbWorker.GetViews(ExportProgressDataStage.GET_VIEWS, totalObjectsToProcess,
+                                viewsText = dbWorker.GetViews(ExportProgressDataStage.GET_VIEWS, schemaObjectsCountPlan, typeObjCountPlan,
                                     currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
 
                                 viewsComments =
                                     dbWorker.GetTableOrViewComments(dbObjectType,
-                                        ExportProgressDataStage.GET_VIEWS_COMMENTS, totalObjectsToProcess,
+                                        ExportProgressDataStage.GET_VIEWS_COMMENTS, schemaObjectsCountPlan, typeObjCountPlan,
                                         currentObjectNumber, out canceledByUser);
                                 if (canceledByUser) return;
                             }
 
-                            var currentType = namesList.FirstOrDefault(c => c.ObjectType == objectType);
-                            var curentNamesList = currentType.ObjectNames;
-                            int currentTypeObjectsCounter = 0;
+                            
                             for (var i = 0; i < curentNamesList.Count; i++)
                             {
 
@@ -459,7 +465,7 @@ namespace OracleStructExporter.Core
                                 string ddl = string.Empty;
                                 string ddlPackageBody = string.Empty;
                                 string ddlPackageHead = string.Empty;
-                                currentObjectName = objectName;
+                                //currentObjectName = objectName;
 
                                 bool currentObjIsSchedulerJob = false;
                                 bool currentObjIsDBMSJob = false;
@@ -468,16 +474,22 @@ namespace OracleStructExporter.Core
                                 {
                                     if (ct.IsCancellationRequested)
                                     {
-                                        progressManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                                            ExportProgressDataStage.UNPLANNED_EXIT, currentObjectName,
-                                            currentObjectNumber,
-                                            totalObjectsToProcess,  null, 0, null, null);
+                                        var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, ExportProgressDataStage.PROCESS_OBJECT);
+                                        progressDataForType.SchemaObjCountPlan = schemaObjectsCountPlan;
+                                        progressDataForType.TypeObjCountPlan = curentNamesList.Count;
+                                        progressDataForType.Current = currentObjectNumber;
+                                        progressDataForType.ObjectName = objectName;
+                                        progressManager.ReportCurrentProgress(progressDataCancel);
                                         return;
                                     }
 
-                                    progressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                                        ExportProgressDataStage.PROCESS_OBJECT, currentObjectName, currentObjectNumber,
-                                        totalObjectsToProcess, null, 0, null, null);
+                                    var progressDataForObject = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStage.PROCESS_OBJECT);
+                                    progressDataForObject.SchemaObjCountPlan = schemaObjectsCountPlan;
+                                    progressDataForObject.TypeObjCountPlan = curentNamesList.Count;
+                                    progressDataForObject.Current = currentObjectNumber;
+                                    progressDataForObject.ObjectName = objectName;
+                                    progressManager.ReportCurrentProgress(progressDataForObject);
+
                                     if (objectType == "PACKAGES")
                                     {
                                         ddlPackageHead = DDLCreator.GetObjectDdlForPackageHeader(packagesHeaders,
@@ -553,7 +565,7 @@ namespace OracleStructExporter.Core
                                         ddl = dbWorker.GetObjectDdl(objectType, objectName,
                                             exportSettingsDetails.SetSequencesValuesTo1,
                                             exportSettingsDetails.AddSlashToC, ExportProgressDataStage.GET_DBLINK,
-                                            totalObjectsToProcess, currentObjectNumber, out canceledByUser);
+                                            schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, out canceledByUser);
                                         if (canceledByUser) return;
                                     }
                                     else
@@ -561,7 +573,7 @@ namespace OracleStructExporter.Core
                                         //сюда не должны зайти, но оставим на всякий случай
                                         var objectSource = dbWorker.GetObjectSource(objectName, objectType,
                                             exportSettingsDetails.AddSlashToC,
-                                            ExportProgressDataStage.GET_UNKNOWN_OBJECT_DDL, totalObjectsToProcess,
+                                            ExportProgressDataStage.GET_UNKNOWN_OBJECT_DDL, schemaObjectsCountPlan, typeObjCountPlan,
                                             currentObjectNumber, out canceledByUser);
                                         if (canceledByUser) return;
                                         ddl = DDLCreator.AddCreateOrReplace(objectSource);
@@ -597,33 +609,52 @@ namespace OracleStructExporter.Core
 
                                     SaveObjectToFile(threadInfo, objectName, objectTypeSubdirName, ddl, extension);
 
-                                    progressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                                        ExportProgressDataStage.PROCESS_OBJECT, currentObjectName, currentObjectNumber,
-                                        totalObjectsToProcess,  null, 0, null, null);
+                                    var progressDataForObject2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStage.PROCESS_OBJECT);
+                                    progressDataForObject2.SchemaObjCountPlan = schemaObjectsCountPlan;
+                                    progressDataForObject2.TypeObjCountPlan = curentNamesList.Count;
+                                    progressDataForObject2.Current = currentObjectNumber;
+                                    progressDataForObject2.ObjectName = objectName;
+                                    progressManager.ReportCurrentProgress(progressDataForObject2);
 
-                                    currentObjectName = string.Empty;
+                                    //currentObjectName = string.Empty;
 
                                 }
                                 catch (Exception ex)
                                 {
-                                    progressManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                                        ExportProgressDataStage.UNPLANNED_EXIT, currentObjectName, currentObjectNumber,
-                                        totalObjectsToProcess,  null, 0, ex.Message, ex.StackTrace);
+                                    var progressDataForObjectErr = new ExportProgressData(ExportProgressDataLevel.ERROR, ExportProgressDataStage.PROCESS_OBJECT);
+                                    progressDataForObjectErr.Error = ex.Message;
+                                    progressDataForObjectErr.ErrorDetails = ex.StackTrace;
+                                    progressDataForObjectErr.SchemaObjCountPlan = schemaObjectsCountPlan;
+                                    progressDataForObjectErr.TypeObjCountPlan = curentNamesList.Count;
+                                    progressDataForObjectErr.Current = currentObjectNumber;
+                                    progressDataForObjectErr.ObjectName = objectName;
+                                    progressManager.ReportCurrentProgress(progressDataForObjectErr);
+
                                     currentObjectNumber--;
                                     currentTypeObjectsCounter--;
                                 }
                             }
 
-                            progressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                                ExportProgressDataStage.PROCESS_OBJECT_TYPE, currentObjectName, currentObjectNumber,
-                                totalObjectsToProcess,  currentObjectTypes, currentTypeObjectsCounter, null,
-                                null);
+                            var progressDataForType2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStage.PROCESS_OBJECT_TYPE);
+                            progressDataForType2.SchemaObjCountPlan = schemaObjectsCountPlan;
+                            progressDataForType2.TypeObjCountPlan = curentNamesList.Count;
+                            progressDataForType2.TypeObjCountFact = currentTypeObjectsCounter;
+                            progressDataForType2.Current = currentObjectNumber;
+                            progressDataForType2.ObjectType = objectType;
+                            progressManager.ReportCurrentProgress(progressDataForType2);
+
                         }
                         catch (Exception ex)
                         {
-                            progressManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                                ExportProgressDataStage.UNPLANNED_EXIT, currentObjectName, currentObjectNumber,
-                                totalObjectsToProcess,  null, 0, ex.Message, ex.StackTrace);
+                            var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, ExportProgressDataStage.PROCESS_OBJECT_TYPE);
+                            progressDataErr.Error = ex.Message;
+                            progressDataErr.ErrorDetails = ex.StackTrace;
+                            progressDataErr.SchemaObjCountPlan = schemaObjectsCountPlan;
+                            progressDataErr.TypeObjCountPlan = curentNamesList.Count;
+                            progressDataErr.TypeObjCountFact = currentTypeObjectsCounter;
+                            progressDataErr.Current = currentObjectNumber;
+                            progressDataErr.ObjectType = objectType;
+                            progressManager.ReportCurrentProgress(progressDataErr);
                         }
                     }
                 }
@@ -657,19 +688,32 @@ namespace OracleStructExporter.Core
             }
             catch (Exception ex)
             {
-                progressManager.ReportCurrentProgress(ExportProgressDataLevel.ERROR,
-                    ExportProgressDataStage.UNPLANNED_EXIT, currentObjectName, currentObjectNumber,
-                    totalObjectsToProcess, null, 0, ex.Message, ex.StackTrace);
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, ExportProgressDataStage.PROCESS_SCHEMA);
+                progressDataErr.Error = ex.Message;
+                progressDataErr.ErrorDetails = ex.StackTrace;
+                progressDataErr.SchemaObjCountPlan = schemaObjectsCountPlan;
+                progressDataErr.SchemaObjCountFact = schemaObjectsCountFact;
+                progressManager.ReportCurrentProgress(progressDataErr);
             }
+        }
 
 
+        public async void StartWork(ThreadInfo threadInfo, CancellationToken ct)
+        {
+            var progressManager =
+                new ProgressDataManager(_progressReporter, threadInfo.ProcessId, threadInfo.Connection);
 
+            int schemaObjectsCountPlan;
+            int schemaObjectsCountFact;
+            ProcessSchema(threadInfo, ct, progressManager, out schemaObjectsCountPlan, out schemaObjectsCountFact);
 
             threadInfo.Finished = true;
-            
-            progressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                ExportProgressDataStage.PROCESS_SCHEMA, currentObjectName, currentObjectNumber,
-                totalObjectsToProcess,  currentSchemaDescr, currentObjectNumber, null, null);
+
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStage.PROCESS_SCHEMA);
+            progressData.SchemaObjCountPlan = schemaObjectsCountPlan;
+            progressData.SchemaObjCountFact = schemaObjectsCountFact;
+            progressData.Current = schemaObjectsCountFact;
+            progressManager.ReportCurrentProgress(progressData);
 
             if (_threadInfoList.All(c => c.Finished))
             {
@@ -683,23 +727,23 @@ namespace OracleStructExporter.Core
         public void StartProcess(DateTime currentDateTime, CancellationToken ct)
         {
 
-            if (ct.IsCancellationRequested)
-            {
-                _mainProgressManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-                    ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-                    0, null, 0, null, null);
-                return;
-            }
-            _mainProgressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGESTARTINFO,
-                ExportProgressDataStage.PROCESS_MAIN, null, 0,
-                0, null, 0, null, null);
+            //if (ct.IsCancellationRequested)
+            //{
+            //    _mainProgressManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
+            //        ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
+            //        0, null, 0, null, null);
+            //    return;
+            //}
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStage.PROCESS_MAIN);
+            _mainProgressManager.ReportCurrentProgress(progressData);
+
             if (_settings.LogSettings.DBLog.Enabled)
             {
                 _mainDbWorker.SaveNewProcessInDBLog(currentDateTime, _threadInfoList.Count, _settings.LogSettings.DBLog.DBLogPrefix, out _processId);
             }
             else
             {
-                //пробуем работать с processId в файле
+                //TODO пробуем работать с processId в файле
             }
             
         }
@@ -712,13 +756,15 @@ namespace OracleStructExporter.Core
             }
             else
             {
-                //пробуем работать с processId в файле
+                //TODO пробуем работать с processId в файле
             }
 
+            var progressData = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStage.PROCESS_MAIN);
+            //TODO посчитать количество по всем потокам
+            //progressData.ProcessObjCountPlan = X;
+            //progressData.ProcessObjCountFact = X;
 
-            _mainProgressManager.ReportCurrentProgress(ExportProgressDataLevel.STAGEENDINFO,
-                ExportProgressDataStage.PROCESS_MAIN, null, 0,
-                0, null, 0, null, null);
+            _mainProgressManager.ReportCurrentProgress(progressData);
         }
     }
 }

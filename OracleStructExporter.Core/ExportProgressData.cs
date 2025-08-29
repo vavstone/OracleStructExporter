@@ -5,20 +5,32 @@ namespace OracleStructExporter.Core
 
     public class ExportProgressData
     {
+        public string ProcessId { get; set; }
+        public Connection CurrentConnection { get; set; }
+
         public string ObjectName { get; set; }
+        public string ObjectType { get; set; }
+        
+        
+        //public int TotalObjects { get; set; }
+        public int ProcessObjCountPlan { get; set; }
+        public int SchemaObjCountPlan { get; set; }
+        public int TypeObjCountPlan { get; set; }
         public int Current { get; set; }
-        public int TotalObjects { get; set; }
+        public int ProcessObjCountFact { get; set; }
+        public int SchemaObjCountFact { get; set; }
+        public int TypeObjCountFact { get; set; }
+        public int MetaObjCountFact { get; set; }
+        public int ErrorsCount { get; set; }
+
+        //public int ObjectNumAddInfo { get; set; }
+        //public int AllProcessErrorsCount { get; internal set; }
 
         public string Error { get; set; }
         public string ErrorDetails { get; set; }
         public string TextAddInfo { get; set; }
-        public int ObjectNumAddInfo { get; set; }
 
-        public string ProcessId { get; set; }
-        
-        public Connection CurrentConnection { get; set; }
 
-        public int AllProcessErrorsCount { get; internal set; }
 
 
         public string Message
@@ -34,7 +46,10 @@ namespace OracleStructExporter.Core
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Запуск работы...";
-                    return $"Завершение работы {DurationString}";
+                    var errorsAddStr = "";
+                    if (ErrorsCount > 0)
+                        errorsAddStr = $". Ошибок: {ErrorsCount}";
+                    return $"Завершение работы. Объекты схем ({ProcessObjCountFact} шт.) выгружены{errorsAddStr}{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)
@@ -42,148 +57,148 @@ namespace OracleStructExporter.Core
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Выгрузка объектов схемы {TextAddInfo}...";
                     var errorsAddStr = "";
-                    if (AllProcessErrorsCount > 0)
-                        errorsAddStr = $". Ошибок: {AllProcessErrorsCount}";
-                    return $"Объекты схемы {TextAddInfo} ({ObjectNumAddInfo} шт.) выгружены{errorsAddStr}{DurationString}";
+                    if (ErrorsCount > 0)
+                        errorsAddStr = $". Ошибок: {ErrorsCount}";
+                    return $"Объекты схемы {TextAddInfo} ({SchemaObjCountFact} шт.) выгружены{errorsAddStr}{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Выгрузка объектов типа {TextAddInfo}...";
-                    return $"Объекты типа {TextAddInfo} ({ObjectNumAddInfo} шт.) выгружены{DurationString}";
+                    return $"Объекты типа {TextAddInfo} ({TypeObjCountFact} шт.) выгружены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_INFO_ABOUT_SYS_VIEW)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return "Получение информации о системных представлениях...";
-                    return $"Информация о системных представлениях ({ObjectNumAddInfo} шт.) получена. {TextAddInfo}{DurationString}";
+                    return $"Информация о системных представлениях ({MetaObjCountFact} шт.) получена. {TextAddInfo}{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStage.GET_OBJECTS_NAMES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о списке объектов схемы...";
-                    return $"Информация о списке объектов схемы ({ObjectNumAddInfo} шт.) получена {DurationString}";
+                    return $"Информация о списке объектов схемы ({MetaObjCountFact} шт.) получена {DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_GRANTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о грантах...";
-                    return $"Информация о грантах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о грантах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_COLUMNS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о столбцах...";
-                    return $"Информация о столбцах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о столбцах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_COLUMNS_COMMENTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о комментариях на столбцы...";
-                    return $"Информация о комментариях на столбцы ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о комментариях на столбцы ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_SYNONYMS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о синонимах...";
-                    return $"Информация о синонимах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о синонимах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_SEQUENCES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о sequences...";
-                    return $"Информация о sequences ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о sequences ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_SCHEDULER_JOBS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о scheduler_jobs...";
-                    return $"Информация о scheduler_jobs ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о scheduler_jobs ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_DMBS_JOBS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о dbms_jobs...";
-                    return $"Информация о dbms_jobs ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о dbms_jobs ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_PACKAGES_HEADERS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о заголовках пакетов...";
-                    return $"Информация о заголовках пакетов ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о заголовках пакетов ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_PACKAGES_BODIES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о телах пакетов...";
-                    return $"Информация о телах пакетов ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о телах пакетов ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_FUNCTIONS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о функциях...";
-                    return $"Информация о функциях ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о функциях ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_PROCEDURES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о процедурах...";
-                    return $"Информация о процедурах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о процедурах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TRIGGERS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о триггерах...";
-                    return $"Информация о триггерах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о триггерах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TYPES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о типах...";
-                    return $"Информация о типах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о типах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TABLE_CONSTRAINTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о ключах таблиц...";
-                    return $"Информация о ключах таблиц ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о ключах таблиц ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TABLES_STRUCTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о таблицах...";
-                    return $"Информация о таблицах ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о таблицах ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TABLES_INDEXES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации об индексах таблиц...";
-                    return $"Информация об индексах таблиц ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация об индексах таблиц ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TABLES_COMMENTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о комментариях на таблицы...";
-                    return $"Информация о комментариях на таблицы ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о комментариях на таблицы ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_TABLES_PARTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о партициях таблиц...";
-                    return $"Информация о партициях таблиц ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о партициях таблиц ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_VIEWS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о представлениях...";
-                    return $"Информация о представлениях ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о представлениях ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_VIEWS_COMMENTS)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Получение информации о комментариях на представления...";
-                    return $"Информация о комментариях на представления ({ObjectNumAddInfo} шт.) получена{DurationString}";
+                    return $"Информация о комментариях на представления ({MetaObjCountFact} шт.) получена{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStage.PROCESS_OBJECT)
@@ -209,27 +224,27 @@ namespace OracleStructExporter.Core
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Перемещение файлов папку err...";
-                    return $"Файлы в err ({ObjectNumAddInfo} шт.) перемещены{DurationString}";
+                    return $"Файлы в err ({MetaObjCountFact} шт.) перемещены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.MOVE_FILES_TO_MAIN_DIR)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Перемещение файлов папку main...";
-                    return $"Файлы в main ({ObjectNumAddInfo} шт.) перемещены{DurationString}";
+                    return $"Файлы в main ({MetaObjCountFact} шт.) перемещены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.SEARCH_AND_DELETE_DUPLICATES_IN_MAIN_DIR)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Поиск и удаление дубликатов в main...";
-                    if (ObjectNumAddInfo>0)
-                        return $"Дубликаты ({ObjectNumAddInfo} шт.) в папке {TextAddInfo} удалены{DurationString}";
+                    if (MetaObjCountFact > 0)
+                        return $"Дубликаты ({MetaObjCountFact} шт.) в папке {TextAddInfo} удалены{DurationString}";
                     return $"Дубликаты не найдены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.COPY_FILES_TO_REPO_DIR)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Копирование файлов папку repo...";
-                    return $"Файлы в repo ({ObjectNumAddInfo} шт.) скопированы{DurationString}";
+                    return $"Файлы в repo ({MetaObjCountFact} шт.) скопированы{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.CREATE_AND_SEND_COMMIT_TO_GIT)
                 {
@@ -330,22 +345,30 @@ namespace OracleStructExporter.Core
             EventId = Guid.NewGuid().ToString();
         }
 
-        public ExportProgressData(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, /*bool threadFinished,*/ string textAddInfo, int objectNumAddInfo, string processId, Connection currentConnection, string error, string errorDetails) : this()
+        public ExportProgressData(ExportProgressDataLevel level, ExportProgressDataStage stage) : this()
         {
             Level = level;
             Stage = stage;
-            ObjectName = objectName;
-            Current = current;
-            TotalObjects = totalObjects;
-            //ThreadFinished = threadFinished;
-            TextAddInfo = textAddInfo;
-            ObjectNumAddInfo = objectNumAddInfo;
-            Error = error;
-            ErrorDetails = errorDetails;
-            ProcessId = processId;
-            CurrentConnection = currentConnection;
-            //DBId = dbId;
-            //UserName = userName;
+            if (level == ExportProgressDataLevel.ERROR)
+                ErrorsCount = 1;
         }
+
+        //public ExportProgressData(ExportProgressDataLevel level, ExportProgressDataStage stage, string objectName, int current, int totalObjects, /*bool threadFinished,*/ string textAddInfo, int objectNumAddInfo, string processId, Connection currentConnection, string error, string errorDetails) : this()
+        //{
+        //    Level = level;
+        //    Stage = stage;
+        //    ObjectName = objectName;
+        //    Current = current;
+        //    TotalObjects = totalObjects;
+        //    //ThreadFinished = threadFinished;
+        //    TextAddInfo = textAddInfo;
+        //    ObjectNumAddInfo = objectNumAddInfo;
+        //    Error = error;
+        //    ErrorDetails = errorDetails;
+        //    ProcessId = processId;
+        //    CurrentConnection = currentConnection;
+        //    //DBId = dbId;
+        //    //UserName = userName;
+        //}
     }
 }

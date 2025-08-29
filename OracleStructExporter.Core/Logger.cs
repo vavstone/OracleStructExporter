@@ -94,6 +94,8 @@ namespace OracleStructExporter.Core
         public void InsertThreadsDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
         {
             //TODO реализовать
+
+
         }
     }
 }

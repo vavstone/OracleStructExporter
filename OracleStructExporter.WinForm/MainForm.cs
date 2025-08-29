@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace OracleStructExporter.WinForm
@@ -14,7 +13,7 @@ namespace OracleStructExporter.WinForm
         Logger logger;
         List<ThreadInfo> threads;
         List<ThreadLogInfoControl> threadLogInfoControls = new List<ThreadLogInfoControl>();
-        string processId;
+        //string processId;
 
         public MainForm()
         {
@@ -26,39 +25,6 @@ namespace OracleStructExporter.WinForm
         void LoadSettingsFromFile()
         {
             settings = SettingsHelper.LoadSettings("OSESettings.xml");
-
-
-            /*{
-                //временное решение
-                settings.Connections = new Connections();
-                settings.Connections.ConnectionsList = new List<Connection>();
-
-                var exportSettingsDetails = new ExportSettingsDetails();
-                exportSettingsDetails.AddSlashTo = Settings.ADD_SLASH_TO;
-                exportSettingsDetails.SessionTransform = Settings.SESSION_TRANSFORM;
-                exportSettingsDetails.SkipGrantOptions = Settings.SKIP_GRANT_OPTIONS;
-                exportSettingsDetails.OrderGrantOptions = Settings.ORDER_GRANT_OPTIONS;
-                exportSettingsDetails.SetSequencesValuesTo1 = cbSetSeqValTo1.Checked;
-                exportSettingsDetails.ExtractOnlyDefPart = cbGetOnlyFirstPart.Checked;
-
-                settings.ExportSettings = new ExportSettings();
-                settings.ExportSettings.WriteOnlyToMainDataFolder = true;
-                settings.ExportSettings.UseProcessesSubFolders = false;
-                settings.ExportSettings.ExportSettingsDetails = exportSettingsDetails;
-
-                var logSettings = new LogSettings();
-                logSettings.TextFilesLog = new TextFilesLog();
-                logSettings.TextFilesLog.ExcludeStageInfo = Settings.ExcludeStageInfo;
-                logSettings.TextFilesLog.Enabled = true;
-
-                logSettings.DBLog = new DBLog();
-                logSettings.DBLog.DBLogPrefix = "OSEWA";
-                logSettings.DBLog.ExcludeStageInfo = Settings.ExcludeStageInfo;
-                logSettings.DBLog.Enabled = true;
-
-                settings.LogSettings = logSettings;
-            }*/
-
             settings.RepairSettingsValues();
         }
 		
@@ -85,8 +51,6 @@ namespace OracleStructExporter.WinForm
             col3.HeaderText = "Схема";
             col3.Width = 190;
             gridConnections.Columns.Add(col3);
-
-            //gridConnections.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
 
         void UpdateSettingsFromInputs(OSESettings settings)
@@ -181,7 +145,6 @@ namespace OracleStructExporter.WinForm
                 threadInfo.Connection = conn;
                 threadInfo.ExportSettings = settings.ExportSettings;
                 threads.Add(threadInfo);
-
             }
 
             foreach (var threadInfo in threads)
@@ -203,9 +166,6 @@ namespace OracleStructExporter.WinForm
                     threadLogInfoControl.Dock = DockStyle.Fill;
                 }
 
-                //settings.LogSettings.DBLog.DBLogDBId = conn.DBIdC;
-                //settings.LogSettings.DBLog.DBLogUserName = conn.UserName;
-
                 threadLogInfoControl.SetProgressStatus("Выгружено: 0, осталось выгрузить: 0");
                 threadLogInfoControl.StartProgressBar();
             }
@@ -216,18 +176,8 @@ namespace OracleStructExporter.WinForm
             exporter = new Exporter();
             exporter.ProgressChanged += ProgressChanged;
 
-
-            
-
-            
-
             exporter.StartWork(settings, threads);
 
-            //foreach (var thread in threads)
-            //{
-            //    thread.ProcessId = processId;
-            //    exporter.StartWork(thread);
-            //}
         }
 
 
@@ -268,11 +218,11 @@ namespace OracleStructExporter.WinForm
                 {
                     // Обновление прогресса
                     currentThreadLogInfoControl.SetProgressStatus($"Выгружено: {progressData.Current}, " +
-                                             $"осталось выгрузить: {progressData.TotalObjects - progressData.Current}");
+                                             $"осталось выгрузить: {progressData.SchemaObjCountPlan - progressData.Current}");
                     currentThreadLogInfoControl.AppendText(message);
                     currentThreadLogInfoControl.SetLblStatus(progressData.Message);
                     // Для ProgressBar: меняем стиль, если это первый прогресс
-                    currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.TotalObjects);
+                    currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.SchemaObjCountPlan);
                     // Обновление значения прогресс-бара
                     if (progressData.Current > 0)
                         currentThreadLogInfoControl.SetProgressValue(progressData.Current);
@@ -287,21 +237,8 @@ namespace OracleStructExporter.WinForm
                     else
                         currentThreadLogInfoControl.SetLblStatus("Готово");
 
-
-                    //var currentThread = threads.First(c => c.Connection == progressData.CurrentConnection);
-                    //currentThread.Finished = true;
-                    //if (threads.All(c => c.Finished))
-                    //{
-                    //    if (settings.LogSettings.DBLog.Enabled)
-                    //    {
-                    //        var dbLogConn = settings.Connections.First(c =>
-                    //            c.DBIdC.ToUpper() == settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
-                    //            settings.LogSettings.DBLog.DBLogUserName.ToUpper());
-                    //        Exporter.UpdateProcess(settings.LogSettings.DBLog.DBLogPrefix, dbLogConn, processId);
-                    //    }
                     
                     currentThreadLogInfoControl.EndProgressBar();
-                    //}
                 }
             }
         }
