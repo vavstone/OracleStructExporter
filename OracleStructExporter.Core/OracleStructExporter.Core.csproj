@@ -69,8 +69,11 @@
     <Compile Include="ObjectTypeNames.cs" />
     <Compile Include="OracleLikeStringComparer.cs" />
     <Compile Include="DBStructs\PartOrSubPartKeyColumns.cs" />
+    <Compile Include="Settings\GitLabRepo.cs" />
+    <Compile Include="Settings\SimpleFileRepo.cs" />
     <Compile Include="Settings\DuplicatesClearSettings.cs" />
     <Compile Include="Settings\LogType.cs" />
+    <Compile Include="Settings\BaseRepo.cs" />
     <Compile Include="Settings\RepoSettings.cs" />
     <Compile Include="Settings\Log.cs" />
     <Compile Include="Settings\TextFilesLog.cs" />
@@ -95,6 +98,8 @@
     <Compile Include="Settings\OSESettings.cs" />
     <Compile Include="Settings\SchedulerSettings.cs" />
     <Compile Include="ThreadInfo.cs" />
+    <Compile Include="FilesManager.cs" />
+    <Compile Include="VcsManager.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

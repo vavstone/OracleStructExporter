@@ -4,10 +4,8 @@ namespace OracleStructExporter.Core
 {
     public class RepoSettings
     {
-        [XmlAttribute]
-        public bool CommitToRepoAfterSuccess { get; set; }
-        [XmlElement]
-        public string PathToExportDataForRepo { get; set; }
+        public SimpleFileRepo SimpleFileRepo { get; set; }
+        public GitLabRepo GitLabRepo { get; set; }
 
     }
 }

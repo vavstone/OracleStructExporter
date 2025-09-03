@@ -12,8 +12,10 @@ namespace OracleStructExporter.Core
         public int? PartitioningKeyCount { get; set; }
         public int? SubPartitioningKeyCount { get; set; }
         public string DefTableSpaceName { get; set; }
+        public string Interval { get; set; }
         public List<PartOrSubPartKeyColumns> PartKeyColumns { get; set; } = new List<PartOrSubPartKeyColumns>();
         public List<PartOrSubPartKeyColumns> SubPartKeyColumns { get; set; } = new List<PartOrSubPartKeyColumns>();
         public List<TabPartitions> Partitions { get; set; } = new List<TabPartitions>();
+        
     }
 }

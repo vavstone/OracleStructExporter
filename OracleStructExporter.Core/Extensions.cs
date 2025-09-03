@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.OracleClient;
 using System.Linq;
 using System.Text;
 
@@ -88,6 +89,14 @@ namespace OracleStructExporter.Core
             }
 
             return res;
+        }
+
+        public static void AddNullableParam(this OracleCommand cmd, string paramName, OracleType paramType, object paramValue)
+        {
+            if (paramValue == null)
+                cmd.Parameters.Add(paramName, paramType).Value = DBNull.Value;
+            else
+                cmd.Parameters.Add(paramName, paramType).Value = paramValue;
         }
     }
 }

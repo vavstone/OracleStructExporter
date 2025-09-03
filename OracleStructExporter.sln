@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OracleStructExporter.WinFor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XMLProcessor", "XMLProcessor\XMLProcessor.csproj", "{AEE64D9E-114E-46E0-A648-615AFB8D68B9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VcsManager.WinForm", "VcsManager.WinForm\VcsManager.WinForm.csproj", "{C2291279-DB4B-46AF-ABC2-1D67E2C51424}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{AEE64D9E-114E-46E0-A648-615AFB8D68B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AEE64D9E-114E-46E0-A648-615AFB8D68B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AEE64D9E-114E-46E0-A648-615AFB8D68B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2291279-DB4B-46AF-ABC2-1D67E2C51424}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2291279-DB4B-46AF-ABC2-1D67E2C51424}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2291279-DB4B-46AF-ABC2-1D67E2C51424}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2291279-DB4B-46AF-ABC2-1D67E2C51424}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

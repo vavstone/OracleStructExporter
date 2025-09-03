@@ -146,27 +146,39 @@ namespace OracleStructExporter.Core
             string schemaName)
         {
             StringBuilder sb = new StringBuilder();
-            var columns_str = getMergedColumns(constraint.ConstraintColumnStructs.OrderBy(c => c.Position)
-                .Select(c => c.ColumnName).ToList());
             var addConstrNameStr = constraint.Generated == "USER NAME"
-                ? $"constraint {constraint.ConstraintName.ToUpper()} "
+                ? $"constraint {constraint.ConstraintName.ToUpper()}"
                 : "";
 
-            var typeKey = "";
-            switch (constraint.ConstraintType.ToUpper())
+            if (constraint.ConstraintType.ToUpper() == "C")
             {
-                case "P":
-                    typeKey = "primary key";
-                    break;
-                case "R":
-                    typeKey = "foreign key";
-                    break;
-                case "U":
-                    typeKey = "unique";
-                    break;
+                sb.AppendLine($"{addConstrNameStr}");
+                sb.Append($"  check ({constraint.SearchCondition})");
             }
+            else
+            {
+                var columns_str = getMergedColumns(constraint.ConstraintColumnStructs.OrderBy(c => c.Position)
+                    .Select(c => c.ColumnName).ToList());
 
-            sb.Append($"{addConstrNameStr}{typeKey} {columns_str}");
+                var typeKey = "";
+                switch (constraint.ConstraintType.ToUpper())
+                {
+                    case "P":
+                        typeKey = "primary key";
+                        break;
+                    case "R":
+                        typeKey = "foreign key";
+                        break;
+                    case "U":
+                        typeKey = "unique";
+                        break;
+                }
+
+                sb.Append($"{addConstrNameStr} {typeKey} {columns_str}");
+            }
+            
+
+
             if (constraint.ConstraintType.ToUpper() == "R")
             {
                 var addSchemaInfo = constraint.ROwner.ToUpper() != schemaName
@@ -420,17 +432,17 @@ namespace OracleStructExporter.Core
                     addToEnd += "compress";
                 if (curTableStruct != null && curTableStruct.Dependencies == "ENABLED")
                 {
-                    if (!string.IsNullOrWhiteSpace(addToEnd)) addToEnd += " ";
+                    if (!string.IsNullOrWhiteSpace(addToEnd)) addToEnd += Environment.NewLine;
                     addToEnd += "rowdependencies";
                 }
                 if (curTableStruct != null && curTableStruct.IOTType == "IOT")
                 {
-                    if (!string.IsNullOrWhiteSpace(addToEnd)) addToEnd += " ";
+                    if (!string.IsNullOrWhiteSpace(addToEnd)) addToEnd += Environment.NewLine;
                     addToEnd += "organization index";
                 }
                 if (curTableStruct != null && curTableStruct.Logging == "NO")
                 {
-                    if (!string.IsNullOrWhiteSpace(addToEnd)) addToEnd += " ";
+                    if (!string.IsNullOrWhiteSpace(addToEnd)) addToEnd += Environment.NewLine;
                     addToEnd += "nologging";
                 }
             }
@@ -493,49 +505,60 @@ namespace OracleStructExporter.Core
                 }
 
                 sbString.AppendPadded(" ", lengthDiff + 1);
-                var colDataTypeToShow = col.DataType.ToUpper();
-                if (colDataTypeToShow == "NUMBER" && col.DataScale != null && col.DataScale == 0 &&
-                    (col.DataPrecision == null || col.DataPrecision == 0))
-                    colDataTypeToShow = "INTEGER";
 
-                var dataTypeOwnerAddStr = string.IsNullOrWhiteSpace(col.DataTypeOwner)
-                    ? ""
-                    : col.DataTypeOwner.ToUpper() + ".";
-
-                sbString.Append(dataTypeOwnerAddStr + colDataTypeToShow);
-                if (col.DataType.ToUpper() == "VARCHAR2" || col.DataType.ToUpper() == "NVARCHAR2" ||
-                    col.DataType.ToUpper() == "CHAR" || col.DataType.ToUpper() == "RAW")
+                if (col.VirtualColumn == "NO")
                 {
-                    var charDataLength = col.CharLength;
-                    if (charDataLength == null || charDataLength == 0)
-                        charDataLength = col.DataLength;
-                    var charUsedAddStr = "";
-                    if (col.CharUsed == "C" && (col.DataType.ToUpper() == "VARCHAR2" || col.DataType.ToUpper() == "CHAR"))
-                        charUsedAddStr = " CHAR";
-                    sbString.Append($"({charDataLength}{charUsedAddStr})");
-                }
+                    var colDataTypeToShow = col.DataType.ToUpper();
+                    if (colDataTypeToShow == "NUMBER" && col.DataScale != null && col.DataScale == 0 &&
+                        (col.DataPrecision == null || col.DataPrecision == 0))
+                        colDataTypeToShow = "INTEGER";
 
-                if ((col.DataType.ToUpper() == "NUMBER" && col.DataPrecision != null) ||
-                    (col.DataType.ToUpper() == "FLOAT" && col.DataPrecision != null && col.DataPrecision < 126)) //почему-то с 126 не нужно выводить точность
-                {
-                    var dataScaleAdd = col.DataScale != null && col.DataScale > 0 ? $",{col.DataScale}" : "";
-                    sbString.Append($"({col.DataPrecision}{dataScaleAdd})");
-                }
+                    var dataTypeOwnerAddStr = string.IsNullOrWhiteSpace(col.DataTypeOwner)
+                        ? ""
+                        : col.DataTypeOwner.ToUpper() + ".";
 
-                if (!string.IsNullOrWhiteSpace(identityStr))
-                    sbString.Append(identityStr);
-                else
-                {
-                    if (!string.IsNullOrWhiteSpace(col.DataDefault) && col.DataDefault.ToUpper() != "NULL")
+                    sbString.Append(dataTypeOwnerAddStr + colDataTypeToShow);
+                    if (col.DataType.ToUpper() == "VARCHAR2" || col.DataType.ToUpper() == "NVARCHAR2" ||
+                        col.DataType.ToUpper() == "CHAR" || col.DataType.ToUpper() == "RAW" ||
+                        col.DataType.ToUpper() == "UROWID")
                     {
-                        sbString.Append(" default");
-                        if (col.DefaultOnNull == "YES")
-                            sbString.Append(" on null");
-                        sbString.Append(" " + col.DataDefault);
+                        var charDataLength = col.CharLength;
+                        if (charDataLength == null || charDataLength == 0)
+                            charDataLength = col.DataLength;
+                        var charUsedAddStr = "";
+                        if (col.CharUsed == "C" &&
+                            (col.DataType.ToUpper() == "VARCHAR2" || col.DataType.ToUpper() == "CHAR"))
+                            charUsedAddStr = " CHAR";
+                        sbString.Append($"({charDataLength}{charUsedAddStr})");
                     }
 
-                    if (col.Nullable.ToUpper() == "N")
-                        sbString.Append(" not null");
+                    if ((col.DataType.ToUpper() == "NUMBER" && col.DataPrecision != null) ||
+                        (col.DataType.ToUpper() == "FLOAT" && col.DataPrecision != null &&
+                         col.DataPrecision < 126)) //почему-то с 126 не нужно выводить точность
+                    {
+                        var dataScaleAdd = col.DataScale != null && col.DataScale > 0 ? $",{col.DataScale}" : "";
+                        sbString.Append($"({col.DataPrecision}{dataScaleAdd})");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(identityStr))
+                        sbString.Append(identityStr);
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(col.DataDefault) && col.DataDefault.ToUpper() != "NULL")
+                        {
+                            sbString.Append(" default");
+                            if (col.DefaultOnNull == "YES")
+                                sbString.Append(" on null");
+                            sbString.Append(" " + col.DataDefault);
+                        }
+
+                        if (col.Nullable.ToUpper() == "N")
+                            sbString.Append(" not null");
+                    }
+                }
+                else
+                {
+                    sbString.Append($"as ({col.DataDefault})");
                 }
 
                 if (i < colsToShow.Count - 1)
@@ -568,6 +591,13 @@ namespace OracleStructExporter.Core
                     var mergedCols = getMergedColumns(curPartTable.PartKeyColumns.OrderBy(c => c.ColumnPosition)
                         .Select(c => c.ColumnName).ToList());
                     sb.Append($"partition by {curPartTable.PartitioningType.ToLower()} {mergedCols}");
+                    var partLessThenAppend = "";
+                    if (curPartTable.PartitioningType == "RANGE" && !string.IsNullOrWhiteSpace(curPartTable.Interval))
+                    {
+                        sb.Append($" interval ({curPartTable.Interval})");
+                        partLessThenAppend = " less than";
+                    }
+
                     if (curPartTable.SubPartKeyColumns.Any())
                     {
                         sb.AppendLine();
@@ -585,7 +615,7 @@ namespace OracleStructExporter.Core
                         {
                             var partition = curPartTable.Partitions[i];
                             sb.AppendLine();
-                            sb.AppendLine($"  partition {partition.PartitionName} values ({partition.HighValue})");
+                            sb.AppendLine($"  partition {partition.PartitionName} values{partLessThenAppend} ({partition.HighValue})");
                             sb.Append($"    tablespace {partition.TableSpaceName}");
                             if (partition.SubPartitions.Any())
                             {
@@ -595,9 +625,10 @@ namespace OracleStructExporter.Core
                                 {
                                     var subPartition = partition.SubPartitions[j];
                                     sb.AppendLine();
+
                                     var highValueAddStr = string.IsNullOrWhiteSpace(subPartition.HighValue)
                                         ? ""
-                                        : $" values ({subPartition.HighValue})";
+                                        : $" values{partLessThenAppend} ({subPartition.HighValue})";
                                     sb.Append(
                                         $"    subpartition {subPartition.SubPartitionName}{highValueAddStr} tablespace {subPartition.TableSpaceName}");
                                     if (j < partition.SubPartitions.Count - 1)
@@ -709,10 +740,12 @@ namespace OracleStructExporter.Core
 
             foreach (var constraint in curTableConstraints.Where(c =>
                              (c.ConstraintType.ToUpper() == "P" || c.ConstraintType.ToUpper() == "R" ||
-                              c.ConstraintType.ToUpper() == "U") &&
+                              c.ConstraintType.ToUpper() == "U" || 
+                              (c.ConstraintType.ToUpper() == "C" && c.Generated=="USER NAME")) &&
                              c.ConstraintColumnStructs.Any() &&
                              (c.BindedIndexStruct == null || c.BindedIndexStruct.IndexType != "IOT - TOP"))
-                         .OrderBy(c => c.ConstraintType).ThenBy(c => c.ConstraintName, new OracleLikeStringComparer()))
+                         .OrderBy(c => GetOrdererSymbols(c.ConstraintType.ToUpper(),new List<string> {"P","R","U","C"})).
+                         ThenBy(c => c.ConstraintName, new OracleLikeStringComparer()))
             {
                 sb.AppendLine("");
                 sb.AppendLine($"alter table {objectNameUpper}");
@@ -728,6 +761,19 @@ namespace OracleStructExporter.Core
             }
 
             return sb.ToString();
+        }
+
+        public static int GetOrdererSymbols(string inputSymbol, List<string> orderList)
+        {
+            int i = 1;
+            foreach (var cur in orderList)
+            {
+                if (inputSymbol == cur)
+                    return i;
+                i++;
+            }
+
+            return 999;
         }
 
         public static string GetObjectDdlForView(Dictionary<string, string> views, List<TableColumnStruct> columnsStructs, List<TableOrViewComment> viewComments,

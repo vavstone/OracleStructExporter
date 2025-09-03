@@ -14,9 +14,12 @@ namespace OracleStructExporter.Core
         [XmlAttribute]
         public bool WriteOnlyToMainDataFolder { get; set; }
         [XmlAttribute]
-        public bool UseProcessesSubFolders { get; set; }
+        public bool UseProcessesSubFoldersInMain { get; set; }
+        [XmlAttribute]
+        public bool ClearMainFolderBeforeWriting { get; set; }
+        
 
-        public DuplicatesClearSettings DuplicatesClearSettings { get; set; }
+        //public DuplicatesClearSettings DuplicatesClearSettings { get; set; }
         public ExportSettingsDetails ExportSettingsDetails { get; set; }
         public RepoSettings RepoSettings { get; set; }
     }

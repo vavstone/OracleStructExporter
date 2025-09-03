@@ -6,23 +6,87 @@ namespace OracleStructExporter.Core
 {
     public class ProgressDataManager
     {
-        List<ExportProgressData> _progressDataList { get; set; } = new List<ExportProgressData>();
+        internal List<ExportProgressData> ProgressDataList { get; set; } = new List<ExportProgressData>();
         IProgress<ExportProgressData> _progressReporter;
         private string _processId;
         private Connection _currentConnection;
+
+        internal List<ProgressDataManager> ChildProgressManagers { get; set; } = new List<ProgressDataManager>();
 
         public void SetProcessId(string id)
         {
             _processId = id;
         }
 
-        public int ErrorsCount
+        public int CurrentThreadErrorsCount
         {
             get
             {
-               return _progressDataList.Where(c => c.Level == ExportProgressDataLevel.ERROR).Count();
+                return ProgressDataList.Where(c => c.Level == ExportProgressDataLevel.ERROR).Count();
             }
         }
+
+        public int ChildThreadsErrorsCount
+        {
+            get
+            {
+                var errCount = 0;
+                if (ChildProgressManagers.Any())
+                    errCount += ChildProgressManagers.Sum(c => c.CurrentThreadErrorsCount);
+                return errCount;
+            }
+        }
+
+        public int AllErrorsCount
+        {
+            get
+            {
+                return CurrentThreadErrorsCount + ChildThreadsErrorsCount;
+            }
+        }
+
+        int CurrentThreadSchemaObjCountPlan
+        {
+            get
+            {
+                var getObjectsNamesEnd = ProgressDataList
+                    .FirstOrDefault(c => c.Stage == ExportProgressDataStage.GET_OBJECTS_NAMES &&
+                                         c.Level == ExportProgressDataLevel.STAGEENDINFO);
+                if (getObjectsNamesEnd != null)
+                    return getObjectsNamesEnd.SchemaObjCountPlan??0;
+                return 0;
+            }
+        }
+
+        public int ChildThreadsSchemaObjCountPlan
+        {
+            get
+            {
+                return ChildProgressManagers.Sum(c => c.CurrentThreadSchemaObjCountPlan);
+            }
+        }
+
+        int CurrentThreadSchemaObjCountFact
+        {
+            get
+            {
+                var processSchemaEnd = ProgressDataList
+                    .FirstOrDefault(c => c.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                                         c.Level == ExportProgressDataLevel.STAGEENDINFO);
+                if (processSchemaEnd != null)
+                    return processSchemaEnd.SchemaObjCountFact??0;
+                return 0;
+            }
+        }
+
+        public int ChildThreadsSchemaObjCountFact
+        {
+            get
+            {
+                return ChildProgressManagers.Sum(c => c.CurrentThreadSchemaObjCountFact);
+            }
+        }
+
 
         public ProgressDataManager(IProgress<ExportProgressData> progressReporter, string processId, Connection currentConnection)
         {
@@ -34,10 +98,11 @@ namespace OracleStructExporter.Core
         public void ReportCurrentProgress(ExportProgressData progressData)
         {
             //var progressData = new ExportProgressData(level, stage, objectName, current, totalObjects, /*threadFinished,*/ textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
-
+            progressData.ProcessId = _processId;
+            progressData.CurrentConnection = _currentConnection;
             if (progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
             {
-                var startItem = _progressDataList.FirstOrDefault(c =>
+                var startItem = ProgressDataList.FirstOrDefault(c =>
                     c.Level == ExportProgressDataLevel.STAGESTARTINFO &&
                     c.Stage == progressData.Stage &&
                     (string.IsNullOrWhiteSpace(progressData.ObjectName) || c.ObjectName == progressData.ObjectName));
@@ -46,28 +111,28 @@ namespace OracleStructExporter.Core
                     progressData.StartStageProgressData = startItem;
                 }
 
-                if (progressData.Stage == ExportProgressDataStage.PROCESS_MAIN)
-                {
-                    //TODO cумма по ошибкам всей выгрузки
-                    //progressData.ErrorsCount =  
-                }
-                if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA)
-                {
-                    //TODO cумма по ошибкам выгрузки схемы
-                    //progressData.ErrorsCount =  
-                }
-                if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
-                {
-                    //TODO cумма по ошибкам выгрузки типа
-                    //progressData.ErrorsCount =  
-                }
-                if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT)
-                {
-                    //TODO cумма по ошибкам выгрузки объекта
-                    //progressData.ErrorsCount =  
-                }
+                //if (progressData.Stage == ExportProgressDataStage.PROCESS_MAIN)
+                //{
+                //    //TODO cумма по ошибкам всей выгрузки
+                //    //progressData.ErrorsCount =  
+                //}
+                //if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA)
+                //{
+                //    //TODO cумма по ошибкам выгрузки схемы
+                //    //progressData.ErrorsCount =  
+                //}
+                //if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
+                //{
+                //    //TODO cумма по ошибкам выгрузки типа
+                //    //progressData.ErrorsCount =  
+                //}
+                //if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT)
+                //{
+                //    //TODO cумма по ошибкам выгрузки объекта
+                //    //progressData.ErrorsCount =  
+                //}
             }
-            _progressDataList.Add(progressData);
+            ProgressDataList.Add(progressData);
             _progressReporter?.Report(progressData);
         }
 

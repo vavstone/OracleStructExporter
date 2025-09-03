@@ -10,6 +10,7 @@ namespace OracleStructExporter.Core
     {
         LogSettings _logSettings;
         //Connection _connection;
+        static object lockObj = 0;
 
         private const string textSplitter =
             "----------------------------------------------------------------------------------------------------------------------------";
@@ -42,10 +43,66 @@ namespace OracleStructExporter.Core
         {
             messageText = "";
 
+            lock (lockObj)
+            {
+                if (!checkOnNecessaryBySettings || IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.TextFilesLog))
+                {
+                    //готовим текст
+                    if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                        progressData.Level == ExportProgressDataLevel.STAGESTARTINFO)
+                    {
+                        //вставляем стартовый разделитель
+                        //messageText += Environment.NewLine;
+                        messageText += textSplitter + Environment.NewLine;
+                        messageText += "НАЧАЛО РАБОТЫ" + Environment.NewLine;
+                        messageText += textSplitter + Environment.NewLine;
+                        messageText += Environment.NewLine;
+                    }
+
+                    messageText += $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId}. {progressData.Message}{Environment.NewLine}";
+
+                    if (progressData.Level == ExportProgressDataLevel.ERROR &&
+                        !string.IsNullOrWhiteSpace(progressData.ErrorDetails))
+                        messageText += progressData.ErrorDetails + Environment.NewLine;
+
+                    if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                        progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
+                    {
+                        //вставляем финальный разделитель
+                        messageText += Environment.NewLine;
+                        messageText += textSplitter + Environment.NewLine;
+                        messageText += "КОНЕЦ РАБОТЫ" + Environment.NewLine;
+                        messageText += textSplitter + Environment.NewLine;
+                        messageText += Environment.NewLine;
+                    }
+
+                    if (_logSettings.TextFilesLog.Enabled)
+                    {
+                        //сохраняем в файл запись лога
+                        var encodingToFile1251 = Encoding.GetEncoding(1251);
+                        var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
+                        var fileName = Path.Combine(pathToLog,
+                            $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}.txt");
+                        if (!Directory.Exists(pathToLog))
+                            Directory.CreateDirectory(pathToLog);
+                        using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                        {
+                            // Записываем DDL объекта
+                            writer.Write(messageText);
+                        }
+                    }
+                }
+            }
+        }
+
+        public void InsertMainTextFileLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
+        {
+            var messageText = "";
+
             if (!checkOnNecessaryBySettings || IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.TextFilesLog))
             {
                 //готовим текст
-                if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_MAIN &&
                     progressData.Level == ExportProgressDataLevel.STAGESTARTINFO)
                 {
                     //вставляем стартовый разделитель
@@ -56,13 +113,13 @@ namespace OracleStructExporter.Core
                     messageText += Environment.NewLine;
                 }
 
-                messageText += $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId}. {progressData.Message}{Environment.NewLine}";
+                messageText += $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId??"не задано"}. {progressData.Message}{Environment.NewLine}";
 
                 if (progressData.Level == ExportProgressDataLevel.ERROR &&
                     !string.IsNullOrWhiteSpace(progressData.ErrorDetails))
                     messageText += progressData.ErrorDetails + Environment.NewLine;
 
-                if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_MAIN &&
                     progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
                 {
                     //вставляем финальный разделитель
@@ -79,7 +136,7 @@ namespace OracleStructExporter.Core
                     var encodingToFile1251 = Encoding.GetEncoding(1251);
                     var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
                     var fileName = Path.Combine(pathToLog,
-                        $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}.txt");
+                        "log.txt");
                     if (!Directory.Exists(pathToLog))
                         Directory.CreateDirectory(pathToLog);
                     using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
@@ -91,10 +148,18 @@ namespace OracleStructExporter.Core
             }
         }
 
-        public void InsertThreadsDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
+        public void InsertThreadsDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings, string connectionString)
         {
             //TODO реализовать
-
+            if (!checkOnNecessaryBySettings ||
+                IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.DBLog))
+            {
+                if (_logSettings.DBLog.Enabled)
+                {
+                    //сохраняем в файл запись лога
+                    DbWorker.SaveConnWorkLogInDB(_logSettings.DBLog.DBLogPrefix, progressData,  connectionString);
+                }
+            }
 
         }
     }

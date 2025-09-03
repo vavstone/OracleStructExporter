@@ -22,9 +22,9 @@ namespace OracleStructExporter.Core
                 SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess.ForEach(c => c.Enabled = false);
             //Если в БД не сохраняем общий лог, то пока нет возможности раскладывать результаты в разрезах: дата-processid
             if (!LogSettings.DBLog.Enabled)
-                ExportSettings.UseProcessesSubFolders = false;
-            if (!ExportSettings.UseProcessesSubFolders && ExportSettings.DuplicatesClearSettings!=null)
-                ExportSettings.DuplicatesClearSettings.ClearDuplicatesInMainFolder = false;
+                ExportSettings.UseProcessesSubFoldersInMain = false;
+            //if (!ExportSettings.UseProcessesSubFolders && ExportSettings.DuplicatesClearSettings!=null)
+            //    ExportSettings.DuplicatesClearSettings.ClearDuplicatesInMainFolder = false;
         }
     }
 }

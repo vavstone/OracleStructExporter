@@ -17,30 +17,33 @@ namespace OracleStructExporter.Core
             {
                 var dict = ExcludeStageInfo.SplitToDictionary(";", ":", true);
                 var res = new Dictionary<ExportProgressDataStage, ExportProgressDataLevel>();
-                foreach (var key in dict.Keys)
+                if (dict != null)
                 {
-                    ExportProgressDataStage resKey;
-                    if (ExportProgressDataStage.TryParse(key, true, out resKey))
+                    foreach (var key in dict.Keys)
                     {
-                        
-                        if (string.IsNullOrWhiteSpace(dict[key]))
-                            res[resKey] = ExportProgressDataLevel.NONE;
-                        else
+                        ExportProgressDataStage resKey;
+                        if (ExportProgressDataStage.TryParse(key, true, out resKey))
                         {
-                            ExportProgressDataLevel resValue;
-                            if (ExportProgressDataLevel.TryParse(dict[key], true, out resValue))
-                            {
-                                res[resKey] = resValue;
-                            }
+
+                            if (string.IsNullOrWhiteSpace(dict[key]))
+                                res[resKey] = ExportProgressDataLevel.NONE;
                             else
                             {
-                                throw new Exception($"Некорректное значение значения: {dict[key]}");
+                                ExportProgressDataLevel resValue;
+                                if (ExportProgressDataLevel.TryParse(dict[key], true, out resValue))
+                                {
+                                    res[resKey] = resValue;
+                                }
+                                else
+                                {
+                                    throw new Exception($"Некорректное значение значения: {dict[key]}");
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        throw new Exception($"Некорректное значение ключа: {key}");
+                        else
+                        {
+                            throw new Exception($"Некорректное значение ключа: {key}");
+                        }
                     }
                 }
 

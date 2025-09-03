@@ -15,6 +15,7 @@
         public int? ColumnId { get; set; }
         public string DataDefault { get; set; }
         public string HiddenColumn { get; set; }
+        public string VirtualColumn { get; set; }
         public string CharUsed { get; set; }
         public string DefaultOnNull { get; set; }
 
@@ -24,5 +25,6 @@
                 : ColumnName.ToLower();
 
         public TableIdentityColumnStruct IdentityColumnStruct { get; set; }
+        
     }
 }

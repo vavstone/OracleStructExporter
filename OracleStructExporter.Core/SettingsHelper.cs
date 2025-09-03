@@ -1,14 +1,18 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Xml.Serialization;
 
 namespace OracleStructExporter.Core
 {
     public static class SettingsHelper
     {
-        public static OSESettings LoadSettings(string filePath)
+        public static OSESettings LoadSettings()
         {
+
+            var filePath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "OSESettings.xml");
+
             var serializer = new XmlSerializer(typeof(OSESettings));
             
             using (var stream = new FileStream(filePath, FileMode.Open))

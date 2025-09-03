@@ -24,7 +24,7 @@ namespace OracleStructExporter.WinForm
 
         void LoadSettingsFromFile()
         {
-            settings = SettingsHelper.LoadSettings("OSESettings.xml");
+            settings = SettingsHelper.LoadSettings();
             settings.RepairSettingsValues();
         }
 		
@@ -165,7 +165,6 @@ namespace OracleStructExporter.WinForm
                     newTab.Controls.Add(threadLogInfoControl);
                     threadLogInfoControl.Dock = DockStyle.Fill;
                 }
-
                 threadLogInfoControl.SetProgressStatus("Выгружено: 0, осталось выгрузить: 0");
                 threadLogInfoControl.StartProgressBar();
             }
@@ -175,8 +174,8 @@ namespace OracleStructExporter.WinForm
 
             exporter = new Exporter();
             exporter.ProgressChanged += ProgressChanged;
-
-            exporter.StartWork(settings, threads);
+            exporter.SetSettings(settings);
+            exporter.StartWork(threads, true);
 
         }
 
@@ -195,8 +194,7 @@ namespace OracleStructExporter.WinForm
 
             if (progressData.IsProgressFromMainProcess)
             {
-                //TODO сообщения от главного процесса
-
+                logger.InsertMainTextFileLog(progressData, true);
                 if (progressData.ProcessFinished)
                 {
                     btnExport.Enabled = true;
@@ -208,7 +206,7 @@ namespace OracleStructExporter.WinForm
             {
                 //сообщения от потоков
                 logger.InsertThreadsTextFileLog(progressData, true, out message);
-                logger.InsertThreadsDBLog(progressData, true);
+                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString);
 
                 var currentThreadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
                     c.Connection.DBIdC.ToUpper() == progressData.CurrentConnection.DBIdC.ToUpper() &&
@@ -217,15 +215,15 @@ namespace OracleStructExporter.WinForm
                 if (!string.IsNullOrWhiteSpace(message))
                 {
                     // Обновление прогресса
-                    currentThreadLogInfoControl.SetProgressStatus($"Выгружено: {progressData.Current}, " +
-                                             $"осталось выгрузить: {progressData.SchemaObjCountPlan - progressData.Current}");
+                    currentThreadLogInfoControl.SetProgressStatus($"Выгружено: {progressData.Current??0}, " +
+                                             $"осталось выгрузить: {progressData.SchemaObjCountPlan??0 - progressData.Current??0}");
                     currentThreadLogInfoControl.AppendText(message);
                     currentThreadLogInfoControl.SetLblStatus(progressData.Message);
                     // Для ProgressBar: меняем стиль, если это первый прогресс
-                    currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.SchemaObjCountPlan);
+                    currentThreadLogInfoControl.SetProgressStyleIfFirstProgress(progressData.SchemaObjCountPlan??0);
                     // Обновление значения прогресс-бара
                     if (progressData.Current > 0)
-                        currentThreadLogInfoControl.SetProgressValue(progressData.Current);
+                        currentThreadLogInfoControl.SetProgressValue(progressData.Current??0);
                 }
 
                 if (progressData.ThreadFinished)
@@ -237,7 +235,6 @@ namespace OracleStructExporter.WinForm
                     else
                         currentThreadLogInfoControl.SetLblStatus("Готово");
 
-                    
                     currentThreadLogInfoControl.EndProgressBar();
                 }
             }

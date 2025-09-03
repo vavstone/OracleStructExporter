@@ -14,6 +14,7 @@ namespace OracleStructExporter.Core
         public string ROwner { get; set; }
         public string RConstraintName { get; set; }
         public string DeleteRule { get; set; }
+        public string SearchCondition { get; set; }
         public List<ConstraintColumnStruct> ConstraintColumnStructs { get; set; } = new List<ConstraintColumnStruct>();
 
         public IndexStruct BindedIndexStruct { get; set; }

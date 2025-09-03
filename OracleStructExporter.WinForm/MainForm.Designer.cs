@@ -29,13 +29,15 @@
         private void InitializeComponent()
         {
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.panel1 = new System.Windows.Forms.Panel();
-            this.label1 = new System.Windows.Forms.Label();
             this.panel2 = new System.Windows.Forms.Panel();
             this.gridConnections = new System.Windows.Forms.DataGridView();
             this.colChecked = new System.Windows.Forms.DataGridViewCheckBoxColumn();
             this.colDB = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colSchema = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.panel1 = new System.Windows.Forms.Panel();
+            this.btCheckNoneConnections = new System.Windows.Forms.Button();
+            this.btCheckAllConnections = new System.Windows.Forms.Button();
+            this.label1 = new System.Windows.Forms.Label();
             this.panel7 = new System.Windows.Forms.Panel();
             this.txtPassword = new System.Windows.Forms.TextBox();
             this.lblPassword = new System.Windows.Forms.Label();
@@ -77,15 +79,13 @@
             this.cbJobs = new System.Windows.Forms.CheckBox();
             this.cbFunctions = new System.Windows.Forms.CheckBox();
             this.cbDBlinks = new System.Windows.Forms.CheckBox();
-            this.btCheckAllConnections = new System.Windows.Forms.Button();
-            this.btCheckNoneConnections = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
             this.splitContainer1.SuspendLayout();
-            this.panel1.SuspendLayout();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.gridConnections)).BeginInit();
+            this.panel1.SuspendLayout();
             this.panel7.SuspendLayout();
             this.panel4.SuspendLayout();
             this.panel6.SuspendLayout();
@@ -114,26 +114,6 @@
             this.splitContainer1.Size = new System.Drawing.Size(1193, 673);
             this.splitContainer1.SplitterDistance = 423;
             this.splitContainer1.TabIndex = 0;
-            // 
-            // panel1
-            // 
-            this.panel1.Controls.Add(this.btCheckNoneConnections);
-            this.panel1.Controls.Add(this.btCheckAllConnections);
-            this.panel1.Controls.Add(this.label1);
-            this.panel1.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panel1.Location = new System.Drawing.Point(0, 0);
-            this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(423, 31);
-            this.panel1.TabIndex = 1;
-            // 
-            // label1
-            // 
-            this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(3, 9);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(199, 13);
-            this.label1.TabIndex = 0;
-            this.label1.Text = "Выберите подключения для выгрузки";
             // 
             // panel2
             // 
@@ -182,6 +162,46 @@
             this.colSchema.Name = "colSchema";
             this.colSchema.ReadOnly = true;
             this.colSchema.Width = 150;
+            // 
+            // panel1
+            // 
+            this.panel1.Controls.Add(this.btCheckNoneConnections);
+            this.panel1.Controls.Add(this.btCheckAllConnections);
+            this.panel1.Controls.Add(this.label1);
+            this.panel1.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panel1.Location = new System.Drawing.Point(0, 0);
+            this.panel1.Name = "panel1";
+            this.panel1.Size = new System.Drawing.Size(423, 31);
+            this.panel1.TabIndex = 1;
+            // 
+            // btCheckNoneConnections
+            // 
+            this.btCheckNoneConnections.Location = new System.Drawing.Point(350, 5);
+            this.btCheckNoneConnections.Name = "btCheckNoneConnections";
+            this.btCheckNoneConnections.Size = new System.Drawing.Size(70, 23);
+            this.btCheckNoneConnections.TabIndex = 2;
+            this.btCheckNoneConnections.Text = "Ничего";
+            this.btCheckNoneConnections.UseVisualStyleBackColor = true;
+            this.btCheckNoneConnections.Click += new System.EventHandler(this.btCheckNoneConnections_Click);
+            // 
+            // btCheckAllConnections
+            // 
+            this.btCheckAllConnections.Location = new System.Drawing.Point(274, 5);
+            this.btCheckAllConnections.Name = "btCheckAllConnections";
+            this.btCheckAllConnections.Size = new System.Drawing.Size(70, 23);
+            this.btCheckAllConnections.TabIndex = 1;
+            this.btCheckAllConnections.Text = "Все";
+            this.btCheckAllConnections.UseVisualStyleBackColor = true;
+            this.btCheckAllConnections.Click += new System.EventHandler(this.btCheckAllConnections_Click);
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(3, 9);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(199, 13);
+            this.label1.TabIndex = 0;
+            this.label1.Text = "Выберите подключения для выгрузки";
             // 
             // panel7
             // 
@@ -444,7 +464,7 @@
             this.txtOutputFolder.Name = "txtOutputFolder";
             this.txtOutputFolder.Size = new System.Drawing.Size(647, 20);
             this.txtOutputFolder.TabIndex = 27;
-            this.txtOutputFolder.Text = "e:\\tmp\\10";
+            this.txtOutputFolder.Text = "c:\\Veselkov\\exp\\data\\main";
             // 
             // lblOutputFolder
             // 
@@ -585,26 +605,6 @@
             this.cbDBlinks.Text = "dblinks";
             this.cbDBlinks.UseVisualStyleBackColor = true;
             // 
-            // btCheckAllConnections
-            // 
-            this.btCheckAllConnections.Location = new System.Drawing.Point(274, 5);
-            this.btCheckAllConnections.Name = "btCheckAllConnections";
-            this.btCheckAllConnections.Size = new System.Drawing.Size(70, 23);
-            this.btCheckAllConnections.TabIndex = 1;
-            this.btCheckAllConnections.Text = "Все";
-            this.btCheckAllConnections.UseVisualStyleBackColor = true;
-            this.btCheckAllConnections.Click += new System.EventHandler(this.btCheckAllConnections_Click);
-            // 
-            // btCheckNoneConnections
-            // 
-            this.btCheckNoneConnections.Location = new System.Drawing.Point(350, 5);
-            this.btCheckNoneConnections.Name = "btCheckNoneConnections";
-            this.btCheckNoneConnections.Size = new System.Drawing.Size(70, 23);
-            this.btCheckNoneConnections.TabIndex = 2;
-            this.btCheckNoneConnections.Text = "Ничего";
-            this.btCheckNoneConnections.UseVisualStyleBackColor = true;
-            this.btCheckNoneConnections.Click += new System.EventHandler(this.btCheckNoneConnections_Click);
-            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -618,10 +618,10 @@
             this.splitContainer1.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).EndInit();
             this.splitContainer1.ResumeLayout(false);
-            this.panel1.ResumeLayout(false);
-            this.panel1.PerformLayout();
             this.panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.gridConnections)).EndInit();
+            this.panel1.ResumeLayout(false);
+            this.panel1.PerformLayout();
             this.panel7.ResumeLayout(false);
             this.panel7.PerformLayout();
             this.panel4.ResumeLayout(false);

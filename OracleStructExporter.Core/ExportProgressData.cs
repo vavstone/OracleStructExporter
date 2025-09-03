@@ -13,15 +13,15 @@ namespace OracleStructExporter.Core
         
         
         //public int TotalObjects { get; set; }
-        public int ProcessObjCountPlan { get; set; }
-        public int SchemaObjCountPlan { get; set; }
-        public int TypeObjCountPlan { get; set; }
-        public int Current { get; set; }
-        public int ProcessObjCountFact { get; set; }
-        public int SchemaObjCountFact { get; set; }
-        public int TypeObjCountFact { get; set; }
-        public int MetaObjCountFact { get; set; }
-        public int ErrorsCount { get; set; }
+        public int? ProcessObjCountPlan { get; set; }
+        public int? SchemaObjCountPlan { get; set; }
+        public int? TypeObjCountPlan { get; set; }
+        public int? Current { get; set; }
+        public int? ProcessObjCountFact { get; set; }
+        public int? SchemaObjCountFact { get; set; }
+        public int? TypeObjCountFact { get; set; }
+        public int? MetaObjCountFact { get; set; }
+        public int? ErrorsCount { get; set; }
 
         //public int ObjectNumAddInfo { get; set; }
         //public int AllProcessErrorsCount { get; internal set; }
@@ -38,10 +38,12 @@ namespace OracleStructExporter.Core
             get
             {
                 var objectAddStr = string.IsNullOrWhiteSpace(ObjectName) ? "" : $" при обработке {ObjectName}";
+                var connectAddStr = $"{CurrentConnection.UserName}@{CurrentConnection.DBIdC}";
                 if (Level == ExportProgressDataLevel.ERROR) return $"Ошибка{objectAddStr}! {Error}";
                 if (Level == ExportProgressDataLevel.CANCEL) return "Операция отменена пользователем!";
+                if (Level == ExportProgressDataLevel.MOMENTALEVENTINFO) return TextAddInfo;
 
-                //TODO добавить информации
+
                 if (Stage == ExportProgressDataStage.PROCESS_MAIN)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
@@ -49,23 +51,23 @@ namespace OracleStructExporter.Core
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
                         errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Завершение работы. Объекты схем ({ProcessObjCountFact} шт.) выгружены{errorsAddStr}{DurationString}";
+                    return $"Завершение работы. Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Выгрузка объектов схемы {TextAddInfo}...";
+                        return $"Выгрузка объектов схемы {connectAddStr}...";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
                         errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Объекты схемы {TextAddInfo} ({SchemaObjCountFact} шт.) выгружены{errorsAddStr}{DurationString}";
+                    return $"Объекты схемы {connectAddStr} ({SchemaObjCountFact} из {SchemaObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Выгрузка объектов типа {TextAddInfo}...";
-                    return $"Объекты типа {TextAddInfo} ({TypeObjCountFact} шт.) выгружены{DurationString}";
+                        return $"Выгрузка объектов типа {ObjectType}...";
+                    return $"Объекты типа {ObjectType} ({TypeObjCountFact} из {TypeObjCountPlan}) выгружены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.GET_INFO_ABOUT_SYS_VIEW)
                 {
@@ -220,33 +222,35 @@ namespace OracleStructExporter.Core
                     return $"Текст объекта {ObjectName} получен{DurationString}";
                 }
 
+                //TODO добавить информации
+
                 if (Stage == ExportProgressDataStage.MOVE_FILES_TO_ERROR_DIR)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Перемещение файлов папку err...";
+                        return $"Перемещение файлов в папку err...";
                     return $"Файлы в err ({MetaObjCountFact} шт.) перемещены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStage.MOVE_FILES_TO_MAIN_DIR)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Перемещение файлов папку main...";
+                        return $"Перемещение файлов в папку main...";
                     return $"Файлы в main ({MetaObjCountFact} шт.) перемещены{DurationString}";
                 }
-                if (Stage == ExportProgressDataStage.SEARCH_AND_DELETE_DUPLICATES_IN_MAIN_DIR)
+                //if (Stage == ExportProgressDataStage.SEARCH_AND_DELETE_DUPLICATES_IN_MAIN_DIR)
+                //{
+                //    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
+                //        return $"Поиск и удаление дубликатов в main...";
+                //    if (MetaObjCountFact > 0)
+                //        return $"Дубликаты ({MetaObjCountFact} шт.) в папке {TextAddInfo} удалены{DurationString}";
+                //    return $"Дубликаты не найдены{DurationString}";
+                //}
+                if (Stage == ExportProgressDataStage.CREATE_SIMPLE_FILE_REPO_COMMIT)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Поиск и удаление дубликатов в main...";
-                    if (MetaObjCountFact > 0)
-                        return $"Дубликаты ({MetaObjCountFact} шт.) в папке {TextAddInfo} удалены{DurationString}";
-                    return $"Дубликаты не найдены{DurationString}";
+                        return $"Создание коммита в локальной файловой СКВ...";
+                    return $"Коммит в локальной файловой СКВ создан ({MetaObjCountFact} изменений) {DurationString}";
                 }
-                if (Stage == ExportProgressDataStage.COPY_FILES_TO_REPO_DIR)
-                {
-                    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Копирование файлов папку repo...";
-                    return $"Файлы в repo ({MetaObjCountFact} шт.) скопированы{DurationString}";
-                }
-                if (Stage == ExportProgressDataStage.CREATE_AND_SEND_COMMIT_TO_GIT)
+                if (Stage == ExportProgressDataStage.CREATE_AND_SEND_GITLAB_COMMIT)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Создание и отправка commit в git...";

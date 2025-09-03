@@ -187,9 +187,9 @@
         
         MOVE_FILES_TO_ERROR_DIR = 29,
         MOVE_FILES_TO_MAIN_DIR = 30,
-        SEARCH_AND_DELETE_DUPLICATES_IN_MAIN_DIR = 31,
-        COPY_FILES_TO_REPO_DIR = 32,
-        CREATE_AND_SEND_COMMIT_TO_GIT = 33
+        //SEARCH_AND_DELETE_DUPLICATES_IN_MAIN_DIR = 31,
+        CREATE_SIMPLE_FILE_REPO_COMMIT = 31,
+        CREATE_AND_SEND_GITLAB_COMMIT = 32
         /*START:
         ProcessObjCountPlan = 0;
         SchemaObjCountPlan = X;

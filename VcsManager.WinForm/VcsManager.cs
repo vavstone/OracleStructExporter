@@ -1,0 +1,234 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace VcsManager.WinForm
+{
+    public class VcsManager
+    {
+        public bool CreateRepoSnapshot(string repoName, string vcsFolder, string snapshotFolder, int? commitNum, DateTime? commitDate)
+        {
+            // Нормализация путей
+            repoName = repoName.Trim('\\');
+            string initialRepoPath = Path.Combine(vcsFolder, "initial");
+            if (!Directory.Exists(initialRepoPath)) Directory.CreateDirectory(initialRepoPath);
+            string commitsPath = Path.Combine(vcsFolder, "commits");
+            if (!Directory.Exists(commitsPath)) Directory.CreateDirectory(commitsPath);
+
+            // Поиск исходного снимка
+            string initialCommitDir = FindInitialCommitDir(initialRepoPath, repoName);
+            if (initialCommitDir == null) return false;
+
+            // Копирование исходной версии
+            string sourceInitialPath = Path.Combine(initialCommitDir, repoName);
+            //string destPath = Path.Combine(snapshotFolder, repoName);
+            string destPath = snapshotFolder;
+            CopyDirectory(sourceInitialPath, destPath);
+
+            // Применение коммитов
+            var commitsToApply = GetCommitsToApply(commitsPath, repoName, commitNum, commitDate);
+            foreach (var commitDir in commitsToApply)
+            {
+                string commitRepoPath = Path.Combine(commitDir, repoName);
+                if (!Directory.Exists(commitRepoPath)) continue;
+
+                ApplyCommitChanges(commitRepoPath, destPath);
+            }
+
+            return true;
+        }
+
+        private string FindInitialCommitDir(string initialPath, string repoName)
+        {
+            foreach (var commitDir in Directory.GetDirectories(initialPath))
+            {
+                string repoPath = Path.Combine(commitDir, repoName);
+                if (Directory.Exists(repoPath) && !DirectoryIsEmpty(repoPath)) return commitDir;
+            }
+            return null;
+        }
+
+        private IEnumerable<string> GetCommitsToApply(string commitsPath, string repoName, int? commitNum, DateTime? commitDate)
+        {
+            /*var commitDirs = Directory.GetDirectories(commitsPath)
+                .Select(d => new { Path = d, Name = Path.GetFileName(d) })
+                .Where(d => TryParseCommitName(d.Name, out DateTime date, out int num))
+                .OrderBy(d => d.Name)
+                .ToList();*/
+            var repoNameParts = repoName.Split('\\');
+            List<Tuple<int, DateTime, string>> commitDirs = new List<Tuple<int, DateTime, string>>();
+            foreach (var commitDir in Directory.GetDirectories(commitsPath))
+            {
+                var commitName = Path.GetFileName(commitDir);
+                DateTime tmpcommitDate;
+                int tmpcommitId;
+                if (TryParseCommitName(commitName, out tmpcommitDate, out tmpcommitId))
+                {
+                    var repoNameDir = Path.Combine(commitDir, repoNameParts[0], repoNameParts[1]);
+                    if (Directory.Exists(repoNameDir))
+                        commitDirs.Add(new Tuple<int, DateTime, string>(tmpcommitId, tmpcommitDate, commitDir));
+                }
+            }
+
+            if (commitNum.HasValue)
+            {
+                //return commitDirs.Where(d => d.Name.EndsWith($"_{commitNum.Value}")).Select(d => d.Path);
+
+                return commitDirs.OrderBy(c => c.Item1).TakeWhile(c => c.Item1 <= commitNum.Value).Select(c => c.Item3);
+            }
+
+            if (commitDate.HasValue)
+            {
+                //var lastCommit = commitDirs.LastOrDefault(d => d.Name.StartsWith(commitDate.Value.ToString("yyyy-MM-dd")));
+                //return lastCommit != null ? new[] { lastCommit.Path } : Enumerable.Empty<string>();
+                return commitDirs.OrderBy(c => c.Item2).ThenBy(c=>c.Item1).TakeWhile(c => c.Item2 <= commitDate.Value).Select(c => c.Item3);
+            }
+
+            return Enumerable.Empty<string>();
+        }
+
+        private bool TryParseCommitName(string name, out DateTime date, out int num)
+        {
+            date = default;
+            num = 0;
+            var parts = name.Split('_');
+            if (parts.Length != 2) return false;
+            return DateTime.TryParse(parts[0], out date) && int.TryParse(parts[1], out num);
+        }
+
+        private void ApplyCommitChanges(string commitRepoPath, string snapshotRepoPath)
+        {
+            foreach (var file in Directory.GetFiles(commitRepoPath, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = file.Substring(commitRepoPath.Length + 1);
+                string destFile = Path.Combine(snapshotRepoPath, relativePath);
+
+                if (new FileInfo(file).Length == 0)
+                {
+                    if (File.Exists(destFile)) File.Delete(destFile);
+                }
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+                    File.Copy(file, destFile, true);
+                }
+            }
+        }
+
+        public void CreateCommit(string inputFolder, List<string> repolist, string vcsFolder, int processId)
+        {
+            string tmpPath = Path.Combine(vcsFolder, "tmp");
+            string currentCommitDir = Path.Combine(tmpPath, $"{DateTime.Now:yyyy-MM-dd}_{processId}");
+
+            CleanDirectory(tmpPath);
+
+            foreach (var repo in repolist)
+            {
+                string repoInputPath = Path.Combine(inputFolder, repo);
+                if (!Directory.Exists(repoInputPath)) continue;
+
+                string previousSnapshotPath = Path.Combine(currentCommitDir, "previous", repo);
+                bool snapshotExists = CreateRepoSnapshot(repo, vcsFolder, previousSnapshotPath, null, DateTime.Now.AddDays(1));
+
+                if (!snapshotExists)
+                {
+                    // Добавление нового репозитория в initial
+                    string initialCommitDir = Path.Combine(vcsFolder, "initial", $"{DateTime.Now:yyyy-MM-dd}_{processId}");
+                    CopyDirectory(repoInputPath, Path.Combine(initialCommitDir, repo));
+                    CleanDirectory(tmpPath);
+                    return;
+                }
+
+                // Сравнение и создание дельты
+                string newSnapshotPath = Path.Combine(currentCommitDir, "new", repo);
+                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, newSnapshotPath);
+            }
+
+            // Перенос дельты в commits
+            string finalCommitPath = Path.Combine(vcsFolder, "commits", $"{DateTime.Now:yyyy-MM-dd}_{processId}");
+            MoveDirectory(Path.Combine(currentCommitDir, "new"), finalCommitPath);
+            CleanDirectory(tmpPath);
+        }
+
+        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath)
+        {
+            var inputFiles = Directory.GetFiles(inputPath, "*", SearchOption.AllDirectories);
+            var previousFiles = Directory.GetFiles(previousPath, "*", SearchOption.AllDirectories);
+
+            // Обработка новых и измененных файлов
+            foreach (var file in inputFiles)
+            {
+                string relativePath = file.Substring(inputPath.Length + 1);
+                string prevFile = Path.Combine(previousPath, relativePath);
+                string deltaFile = Path.Combine(deltaPath, relativePath);
+
+                if (!File.Exists(prevFile) || !FilesAreEqual(file, prevFile))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
+                    File.Copy(file, deltaFile);
+                }
+            }
+
+            // Обработка удаленных файлов
+            foreach (var file in previousFiles)
+            {
+                string relativePath = file.Substring(previousPath.Length + 1);
+                string inputFile = Path.Combine(inputPath, relativePath);
+                string deltaFile = Path.Combine(deltaPath, relativePath);
+
+                if (!File.Exists(inputFile))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
+                    File.WriteAllBytes(deltaFile, new byte[0]); // Пустой файл как флаг удаления
+                }
+            }
+        }
+
+        private bool FilesAreEqual(string path1, string path2)
+        {
+            return File.ReadAllBytes(path1).SequenceEqual(File.ReadAllBytes(path2));
+        }
+
+        private void CopyDirectory(string sourceDir, string destDir)
+        {
+            if (!Directory.Exists(destDir))
+                Directory.CreateDirectory(destDir);
+            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = file.Substring(sourceDir.Length + 1);
+                string destFile = Path.Combine(destDir, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+                File.Copy(file, destFile);
+            }
+        }
+
+        private void MoveDirectory(string sourceDir, string destDir)
+        {
+            Directory.CreateDirectory(destDir);
+            if (Directory.Exists(sourceDir))
+            {
+                foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+                {
+                    string relativePath = file.Substring(sourceDir.Length + 1);
+                    string destFile = Path.Combine(destDir, relativePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+                    File.Move(file, destFile);
+                }
+                Directory.Delete(sourceDir, true);
+            }
+            
+        }
+
+        private void CleanDirectory(string path)
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, true);
+            Directory.CreateDirectory(path);
+        }
+
+        private bool DirectoryIsEmpty(string path)
+        {
+            return !Directory.GetFiles(path).Any() && !Directory.GetDirectories(path).Any();
+        }
+    }
+}
