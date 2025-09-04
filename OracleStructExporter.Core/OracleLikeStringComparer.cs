@@ -36,13 +36,14 @@ namespace OracleStructExporter.Core
             return x.Length.CompareTo(y.Length);
         }
 
-        // Определяет группу символа: 1 (цифры), 2 (буквы), 3 (спецсимволы)
+        // Определяет группу символа: 1($), 2 (цифры), 3 (буквы), 4 (спецсимволы)
         private int GetCharGroup(char c)
         {
-            if (c >= '0' && c <= '9') return 1;      // Цифры
-            if (c >= 'A' && c <= 'Z') return 2;      // Заглавные буквы
-            if (c >= 'a' && c <= 'z') return 2;      // Строчные буквы
-            return 3;                                // Спецсимволы и остальное
+            if (c == '$') return 1;
+            if (c >= '0' && c <= '9') return 2;      // Цифры
+            if (c >= 'A' && c <= 'Z') return 3;      // Заглавные буквы
+            if (c >= 'a' && c <= 'z') return 3;      // Строчные буквы
+            return 4;                                // Спецсимволы и остальное
         }
     }
 }

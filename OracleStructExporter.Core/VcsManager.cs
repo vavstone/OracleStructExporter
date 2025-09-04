@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -13,8 +12,9 @@ namespace OracleStructExporter.Core
            return $"{commitDate.ToString("yyyy-MM-dd")}_{commitNum}";
         }
 
-        public bool CreateRepoSnapshot(string repoName, string vcsFolder, string snapshotFolder, int? commitNum, DateTime? commitDate)
+        public bool CreateRepoSnapshot(string repoName, string vcsFolder, string snapshotFolder, int? commitNum, DateTime? commitDate, out int filesCount)
         {
+            filesCount = 0;
             // Нормализация путей
             repoName = repoName.Trim('\\');
             string initialRepoPath = Path.Combine(vcsFolder, "initial");
@@ -29,9 +29,8 @@ namespace OracleStructExporter.Core
             // Копирование исходной версии
             string sourceInitialPath = Path.Combine(initialCommitDir, repoName);
             //string destPath = Path.Combine(snapshotFolder, repoName);
-            string destPath = snapshotFolder;
-            int filesCount;
-            CopyDirectory(sourceInitialPath, destPath, out filesCount);
+            filesCount = FilesManager.CopyDirectory(sourceInitialPath, snapshotFolder);
+            //CopyDirectory(sourceInitialPath, destPath, out filesCount);
 
             // Применение коммитов
             var commitsToApply = GetCommitsToApply(commitsPath, repoName, commitNum, commitDate);
@@ -40,7 +39,7 @@ namespace OracleStructExporter.Core
                 string commitRepoPath = Path.Combine(commitDir, repoName);
                 if (!Directory.Exists(commitRepoPath)) continue;
 
-                ApplyCommitChanges(commitRepoPath, destPath);
+                ApplyCommitChanges(commitRepoPath, snapshotFolder);
             }
 
             return true;
@@ -51,7 +50,7 @@ namespace OracleStructExporter.Core
             foreach (var commitDir in Directory.GetDirectories(initialPath))
             {
                 string repoPath = Path.Combine(commitDir, repoName);
-                if (Directory.Exists(repoPath) && !DirectoryIsEmpty(repoPath)) return commitDir;
+                if (Directory.Exists(repoPath) && !FilesManager.DirectoryIsEmpty(repoPath)) return commitDir;
             }
             return null;
         }
@@ -130,7 +129,7 @@ namespace OracleStructExporter.Core
             var commitName = GetCommitName(commitDate, processId.ToString());
             string currentCommitDir = Path.Combine(tmpPath, commitName);
 
-            CleanDirectory(tmpPath);
+            //FilesManager.CleanDirectory(tmpPath);
 
             foreach (var repo in repolist)
             {
@@ -138,26 +137,34 @@ namespace OracleStructExporter.Core
                 if (!Directory.Exists(repoInputPath)) continue;
 
                 string previousSnapshotPath = Path.Combine(currentCommitDir, "previous", repo);
-                bool snapshotExists = CreateRepoSnapshot(repo, vcsFolder, previousSnapshotPath, null, DateTime.Now.AddDays(1));
+                FilesManager.CleanDirectory(previousSnapshotPath);
+                int snapshotFilesCount;
+                bool snapshotExists = CreateRepoSnapshot(repo, vcsFolder, previousSnapshotPath, null, DateTime.Now.AddDays(1), out snapshotFilesCount);
 
                 if (!snapshotExists)
                 {
                     // Добавление нового репозитория в initial
-                    string initialCommitDir = Path.Combine(vcsFolder, "initial", commitName);
-                    CopyDirectory(repoInputPath, Path.Combine(initialCommitDir, repo), out changesCount);
-                    CleanDirectory(tmpPath);
+                    string initialCommitDir = Path.Combine(vcsFolder, "initial", commitName, repo);
+                    //CopyDirectory(repoInputPath, Path.Combine(initialCommitDir, repo), out changesCount);
+                    changesCount = FilesManager.CopyDirectory(repoInputPath, initialCommitDir);
+                    //FilesManager.CleanDirectory(tmpPath);
                     return;
                 }
 
                 // Сравнение и создание дельты
-                string newSnapshotPath = Path.Combine(currentCommitDir, "new", repo);
-                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, newSnapshotPath);
+                string tmpDeltaPath = Path.Combine(currentCommitDir, "new", repo);
+                FilesManager.CleanDirectory(tmpDeltaPath);
+                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath);
+
+                // Перенос дельты в commits
+                string finalCommitPath = Path.Combine(vcsFolder, "commits", commitName, repo);
+                //MoveDirectory(Path.Combine(currentCommitDir, "new"), finalCommitPath, out changesCount);
+                changesCount = FilesManager.MoveDirectory(tmpDeltaPath, finalCommitPath);
+                FilesManager.CleanDirectory(tmpDeltaPath);
+                FilesManager.CleanDirectory(previousSnapshotPath);
             }
 
-            // Перенос дельты в commits
-            string finalCommitPath = Path.Combine(vcsFolder, "commits", commitName);
-            MoveDirectory(Path.Combine(currentCommitDir, "new"), finalCommitPath, out changesCount);
-            CleanDirectory(tmpPath);
+            
         }
 
         private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath)
@@ -199,49 +206,49 @@ namespace OracleStructExporter.Core
             return File.ReadAllBytes(path1).SequenceEqual(File.ReadAllBytes(path2));
         }
 
-        private void CopyDirectory(string sourceDir, string destDir, out int filesCount)
-        {
-            if (!Directory.Exists(destDir))
-                Directory.CreateDirectory(destDir);
-            filesCount = 0;
-            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
-            {
-                string relativePath = file.Substring(sourceDir.Length + 1);
-                string destFile = Path.Combine(destDir, relativePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(destFile));
-                File.Copy(file, destFile);
-                filesCount++;
-            }
-        }
+        //private void CopyDirectory(string sourceDir, string destDir, out int filesCount)
+        //{
+        //    if (!Directory.Exists(destDir))
+        //        Directory.CreateDirectory(destDir);
+        //    filesCount = 0;
+        //    foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+        //    {
+        //        string relativePath = file.Substring(sourceDir.Length + 1);
+        //        string destFile = Path.Combine(destDir, relativePath);
+        //        Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+        //        File.Copy(file, destFile);
+        //        filesCount++;
+        //    }
+        //}
 
-        private void MoveDirectory(string sourceDir, string destDir, out  int filesCount)
-        {
-            Directory.CreateDirectory(destDir);
-            filesCount = 0;
-            if (Directory.Exists(sourceDir))
-            {
-                foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
-                {
-                    string relativePath = file.Substring(sourceDir.Length + 1);
-                    string destFile = Path.Combine(destDir, relativePath);
-                    Directory.CreateDirectory(Path.GetDirectoryName(destFile));
-                    File.Move(file, destFile);
-                    filesCount++;
-                }
-                Directory.Delete(sourceDir, true);
-            }
+        //private void MoveDirectory(string sourceDir, string destDir, out  int filesCount)
+        //{
+        //    Directory.CreateDirectory(destDir);
+        //    filesCount = 0;
+        //    if (Directory.Exists(sourceDir))
+        //    {
+        //        foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+        //        {
+        //            string relativePath = file.Substring(sourceDir.Length + 1);
+        //            string destFile = Path.Combine(destDir, relativePath);
+        //            Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+        //            File.Move(file, destFile);
+        //            filesCount++;
+        //        }
+        //        Directory.Delete(sourceDir, true);
+        //    }
             
-        }
+        //}
 
-        private void CleanDirectory(string path)
-        {
-            if (Directory.Exists(path)) Directory.Delete(path, true);
-            Directory.CreateDirectory(path);
-        }
+        //private void CleanDirectory(string path)
+        //{
+        //    if (Directory.Exists(path)) Directory.Delete(path, true);
+        //    Directory.CreateDirectory(path);
+        //}
 
-        private bool DirectoryIsEmpty(string path)
-        {
-            return !Directory.GetFiles(path).Any() && !Directory.GetDirectories(path).Any();
-        }
+        //private bool DirectoryIsEmpty(string path)
+        //{
+        //    return !Directory.GetFiles(path).Any() && !Directory.GetDirectories(path).Any();
+        //}
     }
 }

@@ -8,5 +8,7 @@
         public int? ColumnPosition { get; set; }
         public string Descend { get; set; }
         public string Expression { get; set; }
+
+        public TableColumnStruct BindedTableColumnStruct { get; set; }
     }
 }

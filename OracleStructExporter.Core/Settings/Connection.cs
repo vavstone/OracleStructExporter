@@ -46,5 +46,13 @@ namespace OracleStructExporter.Core
         }
 
         public ExportSettingsDetails ExportSettingsDetails { get; set; }
+
+        public string UserNameAndDBIdC
+        {
+            get
+            {
+                return $"{UserName.ToUpper()}@{DBIdC}";
+            }
+        }
     }
 }

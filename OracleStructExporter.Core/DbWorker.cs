@@ -1,5 +1,6 @@
 ﻿using OracleStructExporter.Core.DBStructs;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.OracleClient;
@@ -919,7 +920,7 @@ namespace OracleStructExporter.Core
             return res;
         }
 
-        public List<PartTables> GetTablesPartitions(bool ExtractOnlyDefParts, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<PartTables> GetTablesPartitions(bool ExtractOnlyDefParts, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
         {
             var res = new List<PartTables>();
 
@@ -943,10 +944,14 @@ namespace OracleStructExporter.Core
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
+            var existsIntervalColumn = systemViewInfo["USER_PART_TABLES"].Any(c => c == "INTERVAL");
+
             try
             {
                 //USER_PART_TABLES
-                string ddlQuery = @"SELECT table_name, partitioning_type, subpartitioning_type, partition_count, def_subpartition_count, partitioning_key_count, subpartitioning_key_count, def_tablespace_name, interval FROM USER_PART_TABLES" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                var addIntervalColumn = existsIntervalColumn ? ", interval" : "";
+                string ddlQuery =
+                    $@"SELECT table_name, partitioning_type, subpartitioning_type, partition_count, def_subpartition_count, partitioning_key_count, subpartitioning_key_count, def_tablespace_name{addIntervalColumn} FROM USER_PART_TABLES{GetAddObjectNameMaskWhere("table_name", _objectNameMask, true)}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -966,7 +971,8 @@ namespace OracleStructExporter.Core
                             if (!reader.IsDBNull(reader.GetOrdinal("subpartitioning_key_count")))
                                 item.SubPartitioningKeyCount = reader.GetInt32(reader.GetOrdinal("subpartitioning_key_count"));
                             item.DefTableSpaceName = reader["def_tablespace_name"].ToString();
-                            item.Interval = reader["interval"].ToString();
+                            if (existsIntervalColumn)
+                                item.Interval = reader["interval"].ToString();
                             res.Add(item);
                         }
                     }
@@ -1156,10 +1162,79 @@ namespace OracleStructExporter.Core
 
             var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.TextAddInfo = infoForProgress.ToString();
+            progressData2.SetTextAddInfo("SYSTEM_VIEW_INFO",infoForProgress.ToString());
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
+        }
+
+        public DateTime? GetStat(int forLastDays)
+        {
+            try
+            {
+                string ddlQuery =
+                    @"select dbid, username, eventtime, errorscount, schemaobjcountplan, schemaobjcountfact
+                        from OSECACONNWORKLOG where stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO'
+                        and sysdate-eventtime<:forLastDays
+                        order by dbid, username, eventtime";
+                using (OracleConnection connection = new OracleConnection(ConnectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
+                    {
+                        cmd.Parameters.Add("forLastDays", OracleType.Number).Value = forLastDays;
+                        using (OracleDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
+                                    return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
+                                return null;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                throw e;
+            }
+
+            return null;
+        }
+
+        public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
+        {
+            try
+            {
+                string ddlQuery =
+                    @"select max(eventtime) max_eventtime from OSECACONNWORKLOG where upper(dbid)=:dbid and upper(username)=:username
+                                    and stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and errorscount=0";
+                using (OracleConnection connection = new OracleConnection(ConnectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
+                    {
+                        cmd.Parameters.Add("dbid", OracleType.VarChar).Value = dbidC.ToUpper();
+                        cmd.Parameters.Add("username", OracleType.VarChar).Value = username.ToUpper();
+                        using (OracleDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
+                                    return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
+                                return null;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                throw e;
+            }
+
+            return null;
         }
 
         public List<IndexStruct> GetTablesIndexes(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)

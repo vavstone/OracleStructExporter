@@ -150,7 +150,6 @@ namespace OracleStructExporter.Core
 
         public void InsertThreadsDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings, string connectionString)
         {
-            //TODO реализовать
             if (!checkOnNecessaryBySettings ||
                 IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.DBLog))
             {

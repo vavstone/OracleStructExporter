@@ -10,7 +10,7 @@ namespace OracleStructExporter.Core
     public static class DDLCreator
     {
 
-        static void BindConstraintsAndIndexes(List<ConstraintStruct> constraints, List<IndexStruct> indexes)
+        static void BindConstraintsColumnsAndIndexes(List<ConstraintStruct> constraints, List<TableColumnStruct> tableColumns, List<IndexStruct> indexes)
         {
             foreach (var constraint in constraints)
             {
@@ -22,6 +22,11 @@ namespace OracleStructExporter.Core
             {
                 index.BindedConstraintStruct = constraints.FirstOrDefault(c =>
                     c.TableName == index.TableName && c.ConstraintName == index.IndexName);
+                foreach (var indexColStruct in index.IndexColumnStructs)
+                {
+                    indexColStruct.BindedTableColumnStruct = tableColumns.FirstOrDefault(c =>
+                        c.TableName == indexColStruct.TableName && c.ColumnName == indexColStruct.ColumnName);
+                }
             }
         }
 
@@ -147,7 +152,7 @@ namespace OracleStructExporter.Core
         {
             StringBuilder sb = new StringBuilder();
             var addConstrNameStr = constraint.Generated == "USER NAME"
-                ? $"constraint {constraint.ConstraintName.ToUpper()}"
+                ? $" constraint {constraint.ConstraintName.ToUpper()}"
                 : "";
 
             if (constraint.ConstraintType.ToUpper() == "C")
@@ -404,7 +409,7 @@ namespace OracleStructExporter.Core
             var curTableIndexes = tablesIndexes.Where(c => c.TableName.ToUpper() == objectNameUpper).ToList();
             var curPartTable = partTables.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper);
 
-            BindConstraintsAndIndexes(curTableConstraints, curTableIndexes);
+            BindConstraintsColumnsAndIndexes(curTableConstraints, curTableColumnsStruct, curTableIndexes);
 
             var sb = new StringBuilder();
             var sbString = new StringBuilder();
@@ -506,7 +511,7 @@ namespace OracleStructExporter.Core
 
                 sbString.AppendPadded(" ", lengthDiff + 1);
 
-                if (col.VirtualColumn == "NO")
+                if (col.VirtualColumn == "NO" || string.IsNullOrWhiteSpace(col.DataDefault))
                 {
                     var colDataTypeToShow = col.DataType.ToUpper();
                     if (colDataTypeToShow == "NUMBER" && col.DataScale != null && col.DataScale == 0 &&
@@ -575,7 +580,7 @@ namespace OracleStructExporter.Core
             {
                 sb.Append(",");
                 sb.AppendLine("");
-                sb.Append("  " + GetContstraintText(constraint, tablesConstraints, schemaName));
+                sb.Append(" " + GetContstraintText(constraint, tablesConstraints, schemaName));
             }
 
             sb.AppendLine();
@@ -669,9 +674,15 @@ namespace OracleStructExporter.Core
                 {
 
                     {
-                        var colOrExprStr = string.IsNullOrWhiteSpace(idxColumnStruct.Expression)
-                            ? idxColumnStruct.ColumnName.ToUpper()
-                            : idxColumnStruct.Expression;
+                        var useExpressionInsteadColNameInIndex = true;
+                        if (idxColumnStruct.BindedTableColumnStruct == null ||
+                            idxColumnStruct.BindedTableColumnStruct.HiddenColumn == "NO"/* &&
+                            !string.IsNullOrWhiteSpace(idxColumnStruct.Expression)*/)
+                            useExpressionInsteadColNameInIndex = false;
+
+                        var colOrExprStr = useExpressionInsteadColNameInIndex
+                            ? idxColumnStruct.Expression
+                            : idxColumnStruct.ColumnName.ToUpper();
                         columns_str += colOrExprStr +
                                        (idxColumnStruct.Descend.ToUpper() == "ASC"
                                            ? ""
@@ -744,12 +755,12 @@ namespace OracleStructExporter.Core
                               (c.ConstraintType.ToUpper() == "C" && c.Generated=="USER NAME")) &&
                              c.ConstraintColumnStructs.Any() &&
                              (c.BindedIndexStruct == null || c.BindedIndexStruct.IndexType != "IOT - TOP"))
-                         .OrderBy(c => GetOrdererSymbols(c.ConstraintType.ToUpper(),new List<string> {"P","R","U","C"})).
+                         .OrderBy(c => GetOrdererSymbols(c.ConstraintType.ToUpper(),new List<string> {"P", "U","R","C"})).
                          ThenBy(c => c.ConstraintName, new OracleLikeStringComparer()))
             {
                 sb.AppendLine("");
                 sb.AppendLine($"alter table {objectNameUpper}");
-                sb.Append("  add ");
+                sb.Append("  add");
                 sb.Append(GetContstraintText(constraint, tablesConstraints, schemaName));
                 sb.Append(";");
             }

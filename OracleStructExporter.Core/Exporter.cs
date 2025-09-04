@@ -1,6 +1,7 @@
 ﻿using OracleStructExporter.Core.DBStructs;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Data.OracleClient;
 using System.IO;
 using System.Linq;
@@ -54,7 +55,7 @@ namespace OracleStructExporter.Core
             var progressData =
                 new ExportProgressData(ExportProgressDataLevel.MOMENTALEVENTINFO,
                     ExportProgressDataStage.PROCESS_MAIN);
-            progressData.TextAddInfo = message;
+            progressData.SetTextAddInfo("MOMENTAL_INFO", message);
             _mainProgressManager.ReportCurrentProgress(progressData);
         }
 
@@ -163,7 +164,7 @@ namespace OracleStructExporter.Core
 
         //static void SearchAndDeleteDuplicatesInMainFolder(ThreadInfo thread)
         //{
-        //    //TODO
+        //    
         //    //здесь необходимо руководствоваться флагом ClearDuplicatesInMainFolder на уровне общих настроек и перекрывающих флагов на уровне настроек Connection, а также при сравнении папок исключать из списка сравниваемых файлы из блока FilesToExcludeFromCheckingOnDoubles
         //}
 
@@ -291,14 +292,15 @@ namespace OracleStructExporter.Core
                 var ct = _cancellationTokenSource.Token;
 
                 _mainDbWorker.SetCancellationToken(ct);
-                
-                //using (OracleConnection connection = new OracleConnection(connectionString))
-                //{
-                //    connection.Open();
-                    
-                    
 
-                    StartProcess(_startDateTime, ct);
+            //using (OracleConnection connection = new OracleConnection(connectionString))
+            //{
+            //    connection.Open();
+
+            var schemasToWork = threadInfoList.Select(c => c.Connection.UserNameAndDBIdC).ToList()
+                .MergeFormatted("", ",");
+
+            StartProcess(_startDateTime, schemasToWork/*, ct*/);
                     //_mainDbWorker.SaveNewProcessInDBLog(_startDateTime, threadInfoList.Count,
                     //    _settings.LogSettings.DBLog.DBLogPrefix, out _processId);
                 //}
@@ -607,7 +609,7 @@ namespace OracleStructExporter.Core
 
                                 partTables = dbWorker.GetTablesPartitions(exportSettingsDetails.ExtractOnlyDefPart,
                                     ExportProgressDataStage.GET_TABLES_PARTS, schemaObjectsCountPlan, typeObjCountPlan,
-                                    currentObjectNumber, objectType, out canceledByUser);
+                                    currentObjectNumber, objectType, systemViewInfo,  out canceledByUser);
                                 if (canceledByUser) return;
                             }
 
@@ -890,19 +892,11 @@ namespace OracleStructExporter.Core
                         progressManager.CurrentThreadErrorsCount == 0)
                     {
                         //TODO копирование сформированных данным экспортом файлов из папки PathToExportDataMain в папку PathToExportDataForRepo (если задано настройками)
-                            CopyFilesToGitLabRepoFolder(threadInfo);
-                            //TODO создание коммита
-                            CreateAndSendCommitToGitLab(threadInfo);
-                        
+                        CopyFilesToGitLabRepoFolder(threadInfo);
+                        //TODO создание коммита
+                        CreateAndSendCommitToGitLab(threadInfo);
                     }
                 }
-
-
-                
-
-
-
-
 
             }
             catch (Exception ex)
@@ -941,17 +935,25 @@ namespace OracleStructExporter.Core
             {
                 //if (_settings.LogSettings.DBLog.Enabled)
                 //{
+
+                var schemasSuccess = _mainProgressManager.ChildProgressManagers.Where(c => c.AllErrorsCount == 0)
+                    .Select(c => c.Connection.UserNameAndDBIdC).ToList().MergeFormatted("", ",");
+                var schemasWithErrors = _mainProgressManager.ChildProgressManagers.Where(c => c.AllErrorsCount > 0)
+                    .Select(c => c.Connection.UserNameAndDBIdC).ToList().MergeFormatted("", ",");
+
                 var progressDataProcMain = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStage.PROCESS_MAIN);
                 progressDataProcMain.ProcessObjCountPlan = _mainProgressManager.ChildThreadsSchemaObjCountPlan;
                 progressDataProcMain.ProcessObjCountFact = _mainProgressManager.ChildThreadsSchemaObjCountFact;
                 progressDataProcMain.ErrorsCount = _mainProgressManager.AllErrorsCount;
+                progressDataProcMain.SetTextAddInfo("SCHEMAS_SUCCESS", schemasSuccess);
+                progressDataProcMain.SetTextAddInfo("SCHEMAS_ERROR", schemasWithErrors);
                 _mainProgressManager.ReportCurrentProgress(progressDataProcMain);
                 EndProcess(_settings.LogSettings.DBLog.DBLogPrefix, progressDataProcMain);
                 //}
             }
         }
 
-        public void StartProcess(DateTime currentDateTime, CancellationToken ct)
+        public void StartProcess(DateTime currentDateTime, string schemasToWork/*, CancellationToken ct*/)
         {
 
             //if (ct.IsCancellationRequested)
@@ -975,8 +977,8 @@ namespace OracleStructExporter.Core
             _mainProgressManager.SetProcessId(_processId);
 
             var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStage.PROCESS_MAIN);
+            progressData.SetTextAddInfo("SCHEMAS_TO_WORK", schemasToWork);
             _mainProgressManager.ReportCurrentProgress(progressData);
-
         }
 
         public void EndProcess(string dbLogPrefix, ExportProgressData progressData)
@@ -990,6 +992,11 @@ namespace OracleStructExporter.Core
                 //TODO пробуем работать с processId в файле
             }
 
+        }
+
+        public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
+        {
+            return _mainDbWorker.GetLastSuccessExportForSchema(dbidC, username);
         }
     }
 }

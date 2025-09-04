@@ -20,6 +20,32 @@ namespace OracleStructExporter.WinForm
             InitializeComponent();
             LoadSettingsFromFile();
             LoadConnectionsGrid();
+            //UpdateFormValues();
+        }
+
+        private void UpdateFormValues()
+        {
+            txtOutputFolder.Text = settings.ExportSettings.PathToExportDataMain;
+            cbSetSeqValTo1.Checked = settings.ExportSettings.ExportSettingsDetails.SetSequencesValuesTo1;
+            cbGetOnlyFirstPart.Checked = settings.ExportSettings.ExportSettingsDetails.ExtractOnlyDefPart;
+            if (settings.ExportSettings.ExportSettingsDetails.MaskForFileNames != null)
+            {
+                tbNameObjectMaskInclude.Text = settings.ExportSettings.ExportSettingsDetails.MaskForFileNames.Include;
+                tbNameObjectMaskInclude.Text = settings.ExportSettings.ExportSettingsDetails.MaskForFileNames.Exclude;
+            }
+
+            var objectsToProcess = settings.ExportSettings.ExportSettingsDetails.ObjectTypesToProcessC;
+            if (objectsToProcess.Contains("DBLINKS")) cbDBlinks.Checked = true;
+            if (objectsToProcess.Contains("FUNCTIONS")) cbFunctions.Checked = true;
+            if (objectsToProcess.Contains("JOBS")) cbJobs.Checked = true;
+            if (objectsToProcess.Contains("PACKAGES")) cbPackages.Checked = true;
+            if (objectsToProcess.Contains("PROCEDURES")) cbProcedures.Checked = true;
+            if (objectsToProcess.Contains("SEQUENCES")) cbSequences.Checked = true;
+            if (objectsToProcess.Contains("SYNONYMS")) cbSynonyms.Checked = true;
+            if (objectsToProcess.Contains("TABLES")) cbTables.Checked = true;
+            if (objectsToProcess.Contains("TRIGGERS")) cbTriggers.Checked = true;
+            if (objectsToProcess.Contains("TYPES")) cbTypes.Checked = true;
+            if (objectsToProcess.Contains("VIEWS")) cbViews.Checked = true;
         }
 
         void LoadSettingsFromFile()
@@ -73,6 +99,9 @@ namespace OracleStructExporter.WinForm
             if (cbTypes.Checked) objectTypesToProcess.Add("TYPES");
             if (cbViews.Checked) objectTypesToProcess.Add("VIEWS");
             exportSettingsDetails.ObjectTypesToProcess = objectTypesToProcess.MergeFormatted(string.Empty, ";");
+
+            exportSettingsDetails.SetSequencesValuesTo1 = cbSetSeqValTo1.Checked;
+            exportSettingsDetails.ExtractOnlyDefPart = cbGetOnlyFirstPart.Checked;
 
             settings.ExportSettings.PathToExportDataMain = txtOutputFolder.Text.Trim();
         }
@@ -272,6 +301,11 @@ namespace OracleStructExporter.WinForm
         private void btCheckNoneConnections_Click(object sender, EventArgs e)
         {
             SetAllConnections(false);
+        }
+
+        private void MainForm_Load(object sender, EventArgs e)
+        {
+            UpdateFormValues();
         }
     }
 }

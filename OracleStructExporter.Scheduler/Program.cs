@@ -128,7 +128,6 @@ namespace OracleStructExporter.Scheduler
 
             if (progressData.IsProgressFromMainProcess)
             {
-                //TODO сообщения от главного процесса
                 logger.InsertMainTextFileLog(progressData, true);
             }
             else
@@ -153,8 +152,26 @@ namespace OracleStructExporter.Scheduler
                     c.Enabled).ToList();
             var listNotProcessedForLongTimeConnections = new List<ConnectionToProcess>();
             {
-                //TODO только коннекты, период обработки которых истек
-                listNotProcessedForLongTimeConnections = listEnabledConnections;
+                //только коннекты, период обработки которых истек или по которым еще не было успешного результата или для которых не назначена частота проверки (OneSuccessResultPerHours=0)
+                foreach (var enabledConnection in listEnabledConnections)
+                {
+                    var connToDo = true;
+                    if (enabledConnection.OneSuccessResultPerHours > 0)
+                    {
+                        var lastSuccessTime =
+                            exporter.GetLastSuccessExportForSchema(enabledConnection.DbId, enabledConnection.UserName);
+                        if (lastSuccessTime != null)
+                        {
+                            var timeFromLastSuccess = DateTime.Now - lastSuccessTime.Value;
+                            if (TimeSpan.FromHours(enabledConnection.OneSuccessResultPerHours) > timeFromLastSuccess)
+                                connToDo = false;
+                        }
+                    }
+                    if (connToDo)
+                        listNotProcessedForLongTimeConnections.Add(enabledConnection);
+                }
+
+                //listNotProcessedForLongTimeConnections = listEnabledConnections;
             }
 
             var listToProcessConnections = new List<ConnectionToProcess>();

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace OracleStructExporter.Core
 {
@@ -28,7 +30,26 @@ namespace OracleStructExporter.Core
 
         public string Error { get; set; }
         public string ErrorDetails { get; set; }
-        public string TextAddInfo { get; set; }
+        //public string TextAddInfo { get; set; }
+        public Dictionary<string,string> textAddInfo { get; set; } = new Dictionary<string,string>();
+
+        public void SetTextAddInfo(string key, string value)
+        {
+            textAddInfo[key]  = value;
+        }
+
+        public string GetTextAddInfo(string key)
+        {
+            if (key == null)
+            {
+                if (!textAddInfo.Any())
+                    return textAddInfo[textAddInfo.Keys.First()];
+                return null;
+            }
+            if (textAddInfo.ContainsKey(key))
+                return textAddInfo[key];
+            return null;
+        }
 
 
 
@@ -41,17 +62,29 @@ namespace OracleStructExporter.Core
                 var connectAddStr = $"{CurrentConnection.UserName}@{CurrentConnection.DBIdC}";
                 if (Level == ExportProgressDataLevel.ERROR) return $"Ошибка{objectAddStr}! {Error}";
                 if (Level == ExportProgressDataLevel.CANCEL) return "Операция отменена пользователем!";
-                if (Level == ExportProgressDataLevel.MOMENTALEVENTINFO) return TextAddInfo;
+                if (Level == ExportProgressDataLevel.MOMENTALEVENTINFO) return GetTextAddInfo("MOMENTAL_INFO");
 
 
                 if (Stage == ExportProgressDataStage.PROCESS_MAIN)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Запуск работы...";
+                        return $"Запуск работы по {GetTextAddInfo("SCHEMAS_TO_WORK")}...";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
                         errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Завершение работы. Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
+                    var schemasAddStr = "";
+                    var schemasSuccess = GetTextAddInfo("SCHEMAS_SUCCESS");
+                    var schemasError = GetTextAddInfo("SCHEMAS_ERROR");
+                    if (!string.IsNullOrEmpty(schemasSuccess))
+                        schemasAddStr += $" Успешно: {schemasSuccess}.";
+                    if (!string.IsNullOrEmpty(schemasError))
+                    {
+                        //if (!string.IsNullOrWhiteSpace(schemasAddStr))
+                        //    schemasAddStr += " ";
+                        schemasAddStr += $" Ошибки: {schemasError}.";
+                    }
+
+                    return $"Завершение работы.{schemasAddStr} Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены.{errorsAddStr}{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)
@@ -73,7 +106,7 @@ namespace OracleStructExporter.Core
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return "Получение информации о системных представлениях...";
-                    return $"Информация о системных представлениях ({MetaObjCountFact} шт.) получена. {TextAddInfo}{DurationString}";
+                    return $"Информация о системных представлениях ({MetaObjCountFact} шт.) получена. {GetTextAddInfo("SYSTEM_VIEW_INFO")}{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStage.GET_OBJECTS_NAMES)
@@ -222,8 +255,6 @@ namespace OracleStructExporter.Core
                     return $"Текст объекта {ObjectName} получен{DurationString}";
                 }
 
-                //TODO добавить информации
-
                 if (Stage == ExportProgressDataStage.MOVE_FILES_TO_ERROR_DIR)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
@@ -257,7 +288,7 @@ namespace OracleStructExporter.Core
                     return $"Commit создан и отправлен в git{DurationString}";
                 }
 
-                return TextAddInfo;
+                return GetTextAddInfo(null);
             }
         }
 

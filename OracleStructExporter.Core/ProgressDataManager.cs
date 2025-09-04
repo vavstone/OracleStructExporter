@@ -9,7 +9,7 @@ namespace OracleStructExporter.Core
         internal List<ExportProgressData> ProgressDataList { get; set; } = new List<ExportProgressData>();
         IProgress<ExportProgressData> _progressReporter;
         private string _processId;
-        private Connection _currentConnection;
+        public Connection Connection;
 
         internal List<ProgressDataManager> ChildProgressManagers { get; set; } = new List<ProgressDataManager>();
 
@@ -92,45 +92,25 @@ namespace OracleStructExporter.Core
         {
             _progressReporter = progressReporter;
             _processId = processId;
-            _currentConnection = currentConnection;
+            Connection = currentConnection;
         }
 
         public void ReportCurrentProgress(ExportProgressData progressData)
         {
             //var progressData = new ExportProgressData(level, stage, objectName, current, totalObjects, /*threadFinished,*/ textAddInfo, objectNumAddInfo, _processId, _currentConnection, error, errorDetails);
             progressData.ProcessId = _processId;
-            progressData.CurrentConnection = _currentConnection;
+            progressData.CurrentConnection = Connection;
             if (progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
             {
                 var startItem = ProgressDataList.FirstOrDefault(c =>
                     c.Level == ExportProgressDataLevel.STAGESTARTINFO &&
                     c.Stage == progressData.Stage &&
-                    (string.IsNullOrWhiteSpace(progressData.ObjectName) || c.ObjectName == progressData.ObjectName));
+                    (string.IsNullOrWhiteSpace(progressData.ObjectName) || c.ObjectName == progressData.ObjectName) &&
+                    (string.IsNullOrWhiteSpace(progressData.ObjectType) || c.ObjectType == progressData.ObjectType));
                 if (startItem != null)
                 {
                     progressData.StartStageProgressData = startItem;
                 }
-
-                //if (progressData.Stage == ExportProgressDataStage.PROCESS_MAIN)
-                //{
-                //    //TODO cумма по ошибкам всей выгрузки
-                //    //progressData.ErrorsCount =  
-                //}
-                //if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA)
-                //{
-                //    //TODO cумма по ошибкам выгрузки схемы
-                //    //progressData.ErrorsCount =  
-                //}
-                //if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
-                //{
-                //    //TODO cумма по ошибкам выгрузки типа
-                //    //progressData.ErrorsCount =  
-                //}
-                //if (progressData.Stage == ExportProgressDataStage.PROCESS_OBJECT)
-                //{
-                //    //TODO cумма по ошибкам выгрузки объекта
-                //    //progressData.ErrorsCount =  
-                //}
             }
             ProgressDataList.Add(progressData);
             _progressReporter?.Report(progressData);

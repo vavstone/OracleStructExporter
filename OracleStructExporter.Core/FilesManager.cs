@@ -25,6 +25,8 @@ namespace OracleStructExporter.Core
 
         public static int MoveDirectory(string sourceDir, string destDir)
         {
+            if (!Directory.Exists(destDir))
+                Directory.CreateDirectory(destDir);
             Directory.CreateDirectory(destDir);
             var filesCounter = 0;
             if (Directory.Exists(sourceDir))
@@ -47,7 +49,7 @@ namespace OracleStructExporter.Core
         public static void CleanDirectory(string path)
         {
             if (Directory.Exists(path)) Directory.Delete(path, true);
-            Directory.CreateDirectory(path);
+            //Directory.CreateDirectory(path);
         }
 
         public static bool DirectoryIsEmpty(string path)
