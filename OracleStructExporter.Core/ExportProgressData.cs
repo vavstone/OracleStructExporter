@@ -341,36 +341,11 @@ namespace OracleStructExporter.Core
             get
             {
                 if (Level != ExportProgressDataLevel.STAGEENDINFO || StartStageProgressData == null) return string.Empty;
-                return $" ({FormatTimeSpan(Duration, true)})";
+                return $" ({Duration.ToStringFormat(true)})";
             }
         }
 
-        static string FormatTimeSpan(TimeSpan val, bool alwaysShowMilliseconds)
-        {
-            if (val.TotalMilliseconds < 1000)
-            {
-                return $"{val.Milliseconds} мсек";
-            }
-
-            if (val.TotalMinutes < 1)
-            {
-                return alwaysShowMilliseconds
-                    ? $"{val.Seconds} сек {val.Milliseconds} мсек"
-                    : $"{val.Seconds} сек";
-            }
-
-            if (val.TotalHours < 1)
-            {
-                return alwaysShowMilliseconds
-                    ? $"{val.Minutes} мин {val.Seconds} сек {val.Milliseconds} мсек"
-                    : $"{val.Minutes} мин {val.Seconds} сек";
-            }
-
-            int totalHours = (int)val.TotalHours;
-            return alwaysShowMilliseconds
-                ? $"{totalHours} час {val.Minutes} мин {val.Seconds} сек {val.Milliseconds} мсек"
-                : $"{totalHours} час {val.Minutes} мин {val.Seconds} сек";
-        }
+        
 
 
 

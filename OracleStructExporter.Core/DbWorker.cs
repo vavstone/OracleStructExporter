@@ -201,7 +201,7 @@ namespace OracleStructExporter.Core
         {
             if (string.IsNullOrWhiteSpace(_objectNameMask)) return "";
             var res = "";
-            var ar = _objectNameMask.Split(';');
+            var ar = _objectNameMask.Trim().Split(new []{';'}, StringSplitOptions.RemoveEmptyEntries);
             if (ar.Any() && !string.IsNullOrWhiteSpace(ar[0]))
             {
                 if (firstInWhereBlock)
@@ -1168,28 +1168,46 @@ namespace OracleStructExporter.Core
             return res;
         }
 
-        public DateTime? GetStat(int forLastDays)
+        public List<SchemaWorkStat> GetStat(int getStatForLastDays, string prefix)
         {
+            var res = new List<SchemaWorkStat>();
             try
             {
                 string ddlQuery =
-                    @"select dbid, username, eventtime, errorscount, schemaobjcountplan, schemaobjcountfact
-                        from OSECACONNWORKLOG where stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO'
-                        and sysdate-eventtime<:forLastDays
-                        order by dbid, username, eventtime";
+                    $@"select process_id, dbid, username, stage, eventlevel, eventtime, errorscount, schemaobjcountfact
+                    from {prefix}CONNWORKLOG where stage='PROCESS_SCHEMA' --and eventlevel='STAGEENDINFO'
+                    and 
+                    process_id in (select process_id from {prefix}CONNWORKLOG where stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and sysdate-eventtime<:forLastDays)";
                 using (OracleConnection connection = new OracleConnection(ConnectionString))
                 {
                     connection.Open();
                     using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
                     {
-                        cmd.Parameters.Add("forLastDays", OracleType.Number).Value = forLastDays;
+                        cmd.Parameters.Add("forLastDays", OracleType.Number).Value = getStatForLastDays;
                         using (OracleDataReader reader = cmd.ExecuteReader())
                         {
-                            if (reader.Read())
+                            while (reader.Read())
                             {
-                                if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
-                                    return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
-                                return null;
+                                ExportProgressDataStage stage;
+                                ExportProgressDataLevel level;
+                                if (ExportProgressDataStage.TryParse(reader["stage"].ToString(), true, out stage) &&
+                                    ExportProgressDataLevel.TryParse(reader["eventlevel"].ToString(), true, out level))
+                                {
+                                    var item = new SchemaWorkStat();
+                                    item.ProcessId = reader.GetInt32(reader.GetOrdinal("process_id"));
+                                    item.DBId = reader["dbid"].ToString().ToUpper();
+                                    item.UserName = reader["username"].ToString().ToUpper();
+                                    item.Stage = stage;
+                                    item.Level = level;
+                                    item.EventTime = reader.GetDateTime(reader.GetOrdinal("eventtime"));
+                                    if (!reader.IsDBNull(reader.GetOrdinal("errorscount")))
+                                        item.ErrorsCount = reader.GetInt32(reader.GetOrdinal("errorscount"));
+                                    //if (!reader.IsDBNull(reader.GetOrdinal("schemaobjcountplan")))
+                                    //    item.SchemaObjCountPlan = reader.GetInt32(reader.GetOrdinal("schemaobjcountplan"));
+                                    if (!reader.IsDBNull(reader.GetOrdinal("schemaobjcountfact")))
+                                        item.SchemaObjCountFact = reader.GetInt32(reader.GetOrdinal("schemaobjcountfact"));
+                                    res.Add(item);
+                                }
                             }
                         }
                     }
@@ -1199,45 +1217,44 @@ namespace OracleStructExporter.Core
             {
                 throw e;
             }
-
-            return null;
+            return res;
         }
 
-        public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
-        {
-            try
-            {
-                string ddlQuery =
-                    @"select max(eventtime) max_eventtime from OSECACONNWORKLOG where upper(dbid)=:dbid and upper(username)=:username
-                                    and stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and errorscount=0";
-                using (OracleConnection connection = new OracleConnection(ConnectionString))
-                {
-                    connection.Open();
-                    using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
-                    {
-                        cmd.Parameters.Add("dbid", OracleType.VarChar).Value = dbidC.ToUpper();
-                        cmd.Parameters.Add("username", OracleType.VarChar).Value = username.ToUpper();
-                        using (OracleDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
-                                    return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
-                                return null;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                throw e;
-            }
+        //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
+        //{
+        //    try
+        //    {
+        //        string ddlQuery =
+        //            @"select max(eventtime) max_eventtime from OSECACONNWORKLOG where upper(dbid)=:dbid and upper(username)=:username
+        //                            and stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and errorscount=0";
+        //        using (OracleConnection connection = new OracleConnection(ConnectionString))
+        //        {
+        //            connection.Open();
+        //            using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
+        //            {
+        //                cmd.Parameters.Add("dbid", OracleType.VarChar).Value = dbidC.ToUpper();
+        //                cmd.Parameters.Add("username", OracleType.VarChar).Value = username.ToUpper();
+        //                using (OracleDataReader reader = cmd.ExecuteReader())
+        //                {
+        //                    if (reader.Read())
+        //                    {
+        //                        if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
+        //                            return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
+        //                        return null;
+        //                    }
+        //                }
+        //            }
+        //        }
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        throw e;
+        //    }
 
-            return null;
-        }
+        //    return null;
+        //}
 
-        public List<IndexStruct> GetTablesIndexes(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<IndexStruct> GetTablesIndexes(string schemaName, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
         {
             var res = new List<IndexStruct>();
 
@@ -1266,9 +1283,10 @@ namespace OracleStructExporter.Core
                 string ddlQuery = @"SELECT i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality 
             from USER_INDEXES i 
             LEFT JOIN USER_PART_INDEXES p ON i.TABLE_NAME=p.table_name and i.INDEX_NAME = p.INDEX_NAME
-            WHERE i.TABLE_TYPE='TABLE'" + GetAddObjectNameMaskWhere("i.table_name", _objectNameMask, false);
+            WHERE i.TABLE_TYPE='TABLE' and i.table_owner=:schemaName" + GetAddObjectNameMaskWhere("i.table_name", _objectNameMask, false);
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
+                    cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
                     using (OracleDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
@@ -1872,13 +1890,22 @@ namespace OracleStructExporter.Core
             }
         }
 
-        public static void SaveConnWorkLogInDB(string prefix, ExportProgressData progressData, string connectionString)
+        public static void SaveConnWorkLogInDB(string prefix, ExportProgressData progressData, string connectionString, DBLog dbLogSettings)
         {
             //try
             //{
+
+            var addCols = ",MESSAGE,TYPEOBJCOUNTPLAN,CURRENTNUM,TYPEOBJCOUNTFACT,METAOBJCOUNTFACT,SCHEMAOBJCOUNTPLAN,OBJTYPE,OBJNAME";
+            var addCols2 = ",:MESSAGE,:TYPEOBJCOUNTPLAN,:CURRENTNUM,:TYPEOBJCOUNTFACT,:METAOBJCOUNTFACT,:SCHEMAOBJCOUNTPLAN,:OBJTYPE,:OBJNAME";
+            foreach (var colToExlude in dbLogSettings.ExludeCONNWORKLOGColumnsC)
+            {
+                addCols = addCols.Replace($",{colToExlude}", "");
+                addCols2 = addCols2.Replace($",:{colToExlude}", "");
+            }
+
                 var query =
-                    $"insert into {prefix}CONNWORKLOG (id, process_id, dbid, username, stage, eventlevel, eventid, eventtime, message, schemaobjcountplan, typeobjcountplan, objtype, objname, currentnum, schemaobjcountfact, typeobjcountfact, metaobjcountfact, errorscount) values " +
-                    $"({prefix}CONNWORKLOG_seq.Nextval, :process_id, :dbid, :username, :stage, :eventlevel, :eventid, :eventtime, :message, :schemaobjcountplan, :typeobjcountplan, :objtype, :objname, :currentnum, :schemaobjcountfact, :typeobjcountfact, :metaobjcountfact, :errorscount)";
+                    $"insert into {prefix}CONNWORKLOG (id, process_id, dbid, username, stage, eventlevel, eventid, eventtime, schemaobjcountfact, errorscount{addCols}) values " +
+                    $"({prefix}CONNWORKLOG_seq.Nextval, :process_id, :dbid, :username, :stage, :eventlevel, :eventid, :eventtime, :schemaobjcountfact, :errorscount{addCols2})";
 
 
 
@@ -1888,24 +1915,34 @@ namespace OracleStructExporter.Core
                     using (OracleCommand cmd = new OracleCommand(query, connection))
                     {
                         cmd.Parameters.Add("process_id", OracleType.Number).Value = int.Parse(progressData.ProcessId);
-                        cmd.Parameters.Add("dbid", OracleType.VarChar).Value = progressData.CurrentConnection.DBIdC;
+                        cmd.Parameters.Add("dbid", OracleType.VarChar).Value =
+                            progressData.CurrentConnection.DBIdC.ToUpper();
                         cmd.Parameters.Add("username", OracleType.VarChar).Value =
-                            progressData.CurrentConnection.UserName;
+                            progressData.CurrentConnection.UserName.ToUpper();
                         cmd.Parameters.Add("stage", OracleType.VarChar).Value = progressData.Stage.ToString();
                         cmd.Parameters.Add("eventlevel", OracleType.VarChar).Value = progressData.Level.ToString();
                         cmd.Parameters.Add("eventid", OracleType.VarChar).Value = progressData.EventId;
                         cmd.Parameters.Add("eventtime", OracleType.DateTime).Value = progressData.EventTime;
-                        cmd.Parameters.Add("message", OracleType.VarChar).Value = progressData.Message;
-
-                        cmd.AddNullableParam("schemaobjcountplan", OracleType.Number, progressData.SchemaObjCountPlan);
-                        cmd.AddNullableParam("typeobjcountplan", OracleType.Number, progressData.TypeObjCountPlan);
-                        cmd.AddNullableParam("objtype", OracleType.VarChar, progressData.ObjectType);
-                        cmd.AddNullableParam("objname", OracleType.VarChar, progressData.ObjectName);
-                        cmd.AddNullableParam("currentnum", OracleType.Number, progressData.Current);
-                        cmd.AddNullableParam("schemaobjcountfact", OracleType.Number, progressData.SchemaObjCountFact);
-                        cmd.AddNullableParam("typeobjcountfact", OracleType.Number, progressData.TypeObjCountFact);
-                        cmd.AddNullableParam("metaobjcountfact", OracleType.Number, progressData.MetaObjCountFact);
                         cmd.AddNullableParam("errorscount", OracleType.Number, progressData.ErrorsCount);
+                        cmd.AddNullableParam("schemaobjcountfact", OracleType.Number, progressData.SchemaObjCountFact);
+
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("MESSAGE"))
+                            cmd.Parameters.Add("MESSAGE", OracleType.VarChar).Value = progressData.Message;
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("TYPEOBJCOUNTPLAN"))
+                            cmd.AddNullableParam("TYPEOBJCOUNTPLAN", OracleType.Number, progressData.TypeObjCountPlan);
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("CURRENTNUM"))
+                            cmd.AddNullableParam("CURRENTNUM", OracleType.Number, progressData.Current);
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("TYPEOBJCOUNTFACT"))
+                            cmd.AddNullableParam("TYPEOBJCOUNTFACT", OracleType.Number, progressData.TypeObjCountFact);
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("METAOBJCOUNTFACT"))
+                            cmd.AddNullableParam("METAOBJCOUNTFACT", OracleType.Number, progressData.MetaObjCountFact);
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("SCHEMAOBJCOUNTPLAN"))
+                            cmd.AddNullableParam("SCHEMAOBJCOUNTPLAN", OracleType.Number, progressData.SchemaObjCountPlan);
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("OBJTYPE"))
+                            cmd.AddNullableParam("OBJTYPE", OracleType.VarChar, progressData.ObjectType);
+                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("OBJNAME"))
+                            cmd.AddNullableParam("OBJNAME", OracleType.VarChar, progressData.ObjectName);
+
                         cmd.ExecuteNonQuery();
                     }
                 }

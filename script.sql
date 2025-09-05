@@ -26,6 +26,8 @@ create index IDX_{префикс}_CNWL_ERR on {префикс}CONNWORKLOG (ERROR
 create index IDX_{префикс}_CNWL_PI on {префикс}CONNWORKLOG (PROCESS_ID);
 create index IDX_{префикс}_CNWL_ST on {префикс}CONNWORKLOG (STAGE);
 create index IDX_{префикс}_CNWL_UN on {префикс}CONNWORKLOG (USERNAME);
+create index IDX_{префикс}_CNWL_ET on {префикс}CONNWORKLOG (EVENTTIME);
+
 alter table {префикс}CONNWORKLOG
   add constraint {префикс}CONNWORKLOG_PK primary key (ID);
 

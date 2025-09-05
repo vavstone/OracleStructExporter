@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime;
 using System.Threading;
 
 namespace OracleStructExporter.Scheduler
@@ -49,27 +50,42 @@ namespace OracleStructExporter.Scheduler
                     WaitBeforeExit();
                     return;
                 }
+
+                //TODO брать из настроек
+                var getStatForLastDays = 365;
+                //Статистика
+                var prefix = settings.LogSettings.DBLog.DBLogPrefix;
+                //var prefix = "OSECA";
+                var statList = exporter.GetAggrStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
+                var statInfo = logger.GetStatInfo(statList, $"Статистика за последние {getStatForLastDays} дней");
+
+                logger.InsertStatFileLog(statInfo);
+
                 // Выбор заданий для обработки
-                var connectionsToProcess = SelectConnectionsToProcess();
+                var connectionsToProcess = SelectConnectionsToProcess(statList);
                 if (!connectionsToProcess.Any())
                 {
                     exporter.ReportMainProcessMessage("Нет заданий для обработки");
-                    WaitBeforeExit();
-                    return;
                 }
-                var threads = new List<ThreadInfo>();
-                // Определение подключений для обработки
-                foreach (var item in connectionsToProcess)
+                else
                 {
-                    var dbIdC = item.DbId;
-                    var userName = item.UserName;
-                    var conn = settings.Connections.FirstOrDefault(c => c.DBIdC == dbIdC && c.UserName == userName);
-                    ThreadInfo threadInfo = new ThreadInfo();
-                    threadInfo.Connection = conn;
-                    threadInfo.ExportSettings = settings.ExportSettings;
-                    threads.Add(threadInfo);
+                    var threads = new List<ThreadInfo>();
+                    // Определение подключений для обработки
+                    foreach (var item in connectionsToProcess)
+                    {
+                        var dbIdC = item.DbId;
+                        var userName = item.UserName;
+                        var conn = settings.Connections.FirstOrDefault(c => c.DBIdC == dbIdC && c.UserName == userName);
+                        ThreadInfo threadInfo = new ThreadInfo();
+                        threadInfo.Connection = conn;
+                        threadInfo.ExportSettings = settings.ExportSettings;
+                        threads.Add(threadInfo);
+                    }
+                    exporter.StartWork(threads, false);
                 }
-                exporter.StartWork(threads,false);
+
+
+
                 WaitBeforeExit();
             }
             catch (Exception e)
@@ -134,7 +150,7 @@ namespace OracleStructExporter.Scheduler
             {
                 //сообщения от потоков
                 logger.InsertThreadsTextFileLog(progressData, true, out message);
-                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString);
+                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString, settings.LogSettings.DBLog);
             }
         }
 
@@ -145,30 +161,89 @@ namespace OracleStructExporter.Scheduler
             return processes.Length > 1;
         }
 
-        private static List<ConnectionToProcess> SelectConnectionsToProcess()
+       
+
+        //private static List<ConnectionToProcess> SelectConnectionsToProcess()
+        //{
+        //    var listEnabledConnections =
+        //        settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess.Where(c =>
+        //            c.Enabled).ToList();
+        //    var listNotProcessedForLongTimeConnections = new List<ConnectionToProcess>();
+        //    {
+        //        //только коннекты, период обработки которых истек или по которым еще не было успешного результата или для которых не назначена частота проверки (OneSuccessResultPerHours=0)
+        //        foreach (var enabledConnection in listEnabledConnections)
+        //        {
+        //            var connToDo = true;
+        //            if (enabledConnection.OneSuccessResultPerHours > 0)
+        //            {
+        //                var lastSuccessTime =
+        //                    exporter.GetLastSuccessExportForSchema(enabledConnection.DbId, enabledConnection.UserName);
+        //                if (lastSuccessTime != null)
+        //                {
+        //                    var timeFromLastSuccess = DateTime.Now - lastSuccessTime.Value;
+        //                    if (TimeSpan.FromHours(enabledConnection.OneSuccessResultPerHours) > timeFromLastSuccess)
+        //                        connToDo = false;
+        //                }
+        //            }
+        //            if (connToDo)
+        //                listNotProcessedForLongTimeConnections.Add(enabledConnection);
+        //        }
+
+        //        //listNotProcessedForLongTimeConnections = listEnabledConnections;
+        //    }
+
+        //    var listToProcessConnections = new List<ConnectionToProcess>();
+        //    {
+        //        // Случайный порядок, количество коннектов в процессе не должно превышать MaxConnectPerOneProcess
+        //        listToProcessConnections = listNotProcessedForLongTimeConnections.OrderBy(r => Guid.NewGuid())
+        //            .Take(settings.SchedulerSettings.ConnectionsToProcess.MaxConnectPerOneProcess).ToList();
+        //    }
+
+        //    return listToProcessConnections;
+
+        //    // Реализация логики выбора соединений для обработки
+        //    // согласно алгоритму из ТЗ
+        //    //return settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess
+        //    //    .Where(c => c.Enabled && ShouldProcessConnection(c))
+        //    //    .OrderBy(r => Guid.NewGuid()) // Случайный порядок
+        //    //    .Take(settings.SchedulerSettings.ConnectionsToProcess.MaxConnectPerOneProcess)
+        //    //    .ToArray();
+        //}
+
+        private static List<ConnectionToProcess> SelectConnectionsToProcess(List<SchemaWorkAggrStat> statInfo)
         {
             var listEnabledConnections =
                 settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess.Where(c =>
                     c.Enabled).ToList();
-            var listNotProcessedForLongTimeConnections = new List<ConnectionToProcess>();
+            Dictionary<ConnectionToProcess, TimeSpan?> listToWorkConnectionsWithTimeBeforePlanLaunch =
+                new Dictionary<ConnectionToProcess, TimeSpan?>();
+            //var listNotProcessedForLongTimeConnections = new List<ConnectionToProcess>();
             {
                 //только коннекты, период обработки которых истек или по которым еще не было успешного результата или для которых не назначена частота проверки (OneSuccessResultPerHours=0)
                 foreach (var enabledConnection in listEnabledConnections)
                 {
                     var connToDo = true;
+                    TimeSpan? timeBeforePlanLaunch = null;
                     if (enabledConnection.OneSuccessResultPerHours > 0)
                     {
-                        var lastSuccessTime =
-                            exporter.GetLastSuccessExportForSchema(enabledConnection.DbId, enabledConnection.UserName);
-                        if (lastSuccessTime != null)
+                        var statInfoItem = statInfo.FirstOrDefault(c =>
+                            c.DBId == enabledConnection.DbId.ToUpper() &&
+                            c.UserName == enabledConnection.UserName.ToUpper());
+                             
+                        if (statInfoItem != null && statInfoItem.TimeBeforePlanLaunch != null)
                         {
-                            var timeFromLastSuccess = DateTime.Now - lastSuccessTime.Value;
-                            if (TimeSpan.FromHours(enabledConnection.OneSuccessResultPerHours) > timeFromLastSuccess)
+                            if (statInfoItem.TimeBeforePlanLaunch.Value>TimeSpan.Zero)
                                 connToDo = false;
+                            else
+                            {
+                                timeBeforePlanLaunch = statInfoItem.TimeBeforePlanLaunch.Value;
+                            }
                         }
                     }
+
                     if (connToDo)
-                        listNotProcessedForLongTimeConnections.Add(enabledConnection);
+                        //listNotProcessedForLongTimeConnections.Add(enabledConnection);
+                        listToWorkConnectionsWithTimeBeforePlanLaunch[enabledConnection] = timeBeforePlanLaunch;
                 }
 
                 //listNotProcessedForLongTimeConnections = listEnabledConnections;
@@ -176,20 +251,15 @@ namespace OracleStructExporter.Scheduler
 
             var listToProcessConnections = new List<ConnectionToProcess>();
             {
-                // Случайный порядок, количество коннектов в процессе не должно превышать MaxConnectPerOneProcess
-                listToProcessConnections = listNotProcessedForLongTimeConnections.OrderBy(r => Guid.NewGuid())
-                    .Take(settings.SchedulerSettings.ConnectionsToProcess.MaxConnectPerOneProcess).ToList();
+                // По приоритету с наибольшим опозданием от графика количество коннектов в процессе не должно превышать MaxConnectPerOneProcess
+                listToProcessConnections = listToWorkConnectionsWithTimeBeforePlanLaunch.
+                    OrderBy(c=>c.Value??TimeSpan.MinValue).
+                    Select(c=>c.Key).
+                    Take(settings.SchedulerSettings.ConnectionsToProcess.MaxConnectPerOneProcess).ToList();
             }
 
             return listToProcessConnections;
 
-            // Реализация логики выбора соединений для обработки
-            // согласно алгоритму из ТЗ
-            //return settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess
-            //    .Where(c => c.Enabled && ShouldProcessConnection(c))
-            //    .OrderBy(r => Guid.NewGuid()) // Случайный порядок
-            //    .Take(settings.SchedulerSettings.ConnectionsToProcess.MaxConnectPerOneProcess)
-            //    .ToArray();
         }
 
         //private static int CreateProcessRecord(int connectionsCount)

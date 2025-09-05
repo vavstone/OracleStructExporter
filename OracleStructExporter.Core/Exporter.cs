@@ -597,7 +597,7 @@ namespace OracleStructExporter.Core
                                     schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, out canceledByUser);
                                 if (canceledByUser) return;
 
-                                tablesIndexes = dbWorker.GetTablesIndexes(ExportProgressDataStage.GET_TABLES_INDEXES,
+                                tablesIndexes = dbWorker.GetTablesIndexes(userId, ExportProgressDataStage.GET_TABLES_INDEXES,
                                     schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, out canceledByUser);
                                 if (canceledByUser) return;
 
@@ -994,9 +994,17 @@ namespace OracleStructExporter.Core
 
         }
 
-        public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
+        //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
+        //{
+        //    return _mainDbWorker.GetLastSuccessExportForSchema(dbidC, username);
+        //}
+
+        public List<SchemaWorkAggrStat> GetAggrStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
         {
-            return _mainDbWorker.GetLastSuccessExportForSchema(dbidC, username);
+            var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
+            return SchemaWorkAggrStat.GetAggrStat(plainStat, scheduledConnections);
         }
+
+
     }
 }

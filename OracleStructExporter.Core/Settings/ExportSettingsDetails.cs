@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Serialization;
 
@@ -26,7 +27,7 @@ namespace OracleStructExporter.Core
             {
                 if (string.IsNullOrWhiteSpace(AddSlashTo))
                     return new List<string>();
-                return AddSlashTo.Split(';').ToList();
+                return AddSlashTo.Trim().Split(new []{';'}, StringSplitOptions.RemoveEmptyEntries).ToList();
             }
         }
         [XmlElement]
@@ -38,7 +39,7 @@ namespace OracleStructExporter.Core
             {
                 if (string.IsNullOrWhiteSpace(SkipGrantOptions))
                     return new List<string>();
-                return SkipGrantOptions.Split(';').ToList();
+                return SkipGrantOptions.Trim().Split(new []{';'}, StringSplitOptions.RemoveEmptyEntries).ToList();
             }
         }
         [XmlElement]
@@ -50,7 +51,7 @@ namespace OracleStructExporter.Core
             {
                 if (string.IsNullOrWhiteSpace(OrderGrantOptions))
                     return new List<string>();
-                return OrderGrantOptions.Split(';').ToList();
+                return OrderGrantOptions.Trim().Split(new []{';'}, StringSplitOptions.RemoveEmptyEntries).ToList();
             }
         }
         [XmlElement]
@@ -62,7 +63,7 @@ namespace OracleStructExporter.Core
             {
                 if (string.IsNullOrWhiteSpace(ObjectTypesToProcess))
                     return new List<string>();
-                return ObjectTypesToProcess.Split(';').ToList();
+                return ObjectTypesToProcess.Trim().Split(new []{';'}, StringSplitOptions.RemoveEmptyEntries).ToList();
             }
         }
         [XmlAttribute]

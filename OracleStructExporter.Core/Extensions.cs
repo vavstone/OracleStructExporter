@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.OracleClient;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -97,6 +98,85 @@ namespace OracleStructExporter.Core
                 cmd.Parameters.Add(paramName, paramType).Value = DBNull.Value;
             else
                 cmd.Parameters.Add(paramName, paramType).Value = paramValue;
+        }
+
+        //public static string ToStringFormat(this TimeSpan val, bool alwaysShowMilliseconds)
+        //{
+        //    if (val.TotalMilliseconds < 1000)
+        //    {
+        //        return $"{val.Milliseconds} мсек";
+        //    }
+
+        //    if (val.TotalMinutes < 1)
+        //    {
+        //        return alwaysShowMilliseconds
+        //            ? $"{val.Seconds} сек {val.Milliseconds} мсек"
+        //            : $"{val.Seconds} сек";
+        //    }
+
+        //    if (val.TotalHours < 1)
+        //    {
+        //        return alwaysShowMilliseconds
+        //            ? $"{val.Minutes} мин {val.Seconds} сек {val.Milliseconds} мсек"
+        //            : $"{val.Minutes} мин {val.Seconds} сек";
+        //    }
+
+        //    int totalHours = (int)val.TotalHours;
+        //    return alwaysShowMilliseconds
+        //        ? $"{totalHours} час {val.Minutes} мин {val.Seconds} сек {val.Milliseconds} мсек"
+        //        : $"{totalHours} час {val.Minutes} мин {val.Seconds} сек";
+        //}
+
+        public static string ToStringFormat(this TimeSpan val, bool alwaysShowMilliseconds)
+        {
+            bool isNegative = val.Ticks < 0;
+            TimeSpan absoluteVal = isNegative ? val.Negate() : val;
+
+            string result;
+
+            if (absoluteVal.TotalMilliseconds < 1000)
+            {
+                result = $"{absoluteVal.Milliseconds} мсек";
+            }
+            else if (absoluteVal.TotalMinutes < 1)
+            {
+                result = alwaysShowMilliseconds
+                    ? $"{absoluteVal.Seconds} сек {absoluteVal.Milliseconds} мсек"
+                    : $"{absoluteVal.Seconds} сек";
+            }
+            else if (absoluteVal.TotalHours < 1)
+            {
+                result = alwaysShowMilliseconds
+                    ? $"{absoluteVal.Minutes} мин {absoluteVal.Seconds} сек {absoluteVal.Milliseconds} мсек"
+                    : $"{absoluteVal.Minutes} мин {absoluteVal.Seconds} сек";
+            }
+            else
+            {
+                int totalHours = (int)absoluteVal.TotalHours;
+                result = alwaysShowMilliseconds
+                    ? $"{totalHours} час {absoluteVal.Minutes} мин {absoluteVal.Seconds} сек {absoluteVal.Milliseconds} мсек"
+                    : $"{totalHours} час {absoluteVal.Minutes} мин {absoluteVal.Seconds} сек";
+            }
+
+            return isNegative ? $"- {result}" : result;
+        }
+
+        public static string ToStringFormat(this double val, int decimalPlaces)
+        {
+            if (decimalPlaces < 0)
+                throw new ArgumentException("Кол-во знаков после запятой не может быть отрицательным");
+
+            // Ограничиваем точность 15 знаками для избежания ошибок округления double
+            if (decimalPlaces > 15)
+                decimalPlaces = 15;
+
+            double rounded = Math.Round(val, decimalPlaces, MidpointRounding.AwayFromZero);
+
+            if (decimalPlaces == 0)
+                return rounded.ToString("0", CultureInfo.InvariantCulture);
+
+            string formatString = "0." + new string('#', decimalPlaces);
+            return rounded.ToString(formatString, CultureInfo.InvariantCulture);
         }
     }
 }
