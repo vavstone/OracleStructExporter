@@ -5,6 +5,83 @@ using System.Linq;
 namespace OracleStructExporter.Core
 {
 
+    public class RepoChangeObjAndOperGroupInfo
+    {
+        public OracleObjectType ObjectType { get; set; }
+        public RepoOperation Operation { get; set; }
+        public int ChangesCount { get; set; }
+        public long FilesSize { get; set; }
+        public DateTime? FirstModificationTime { get; set; }
+        public DateTime? LastModificationTime { get; set; }
+    }
+
+    public class RepoChangeCommitGroupInfo
+    {
+        public DateTime CommitCommonDate { get; set; }
+        public int ProcessId { get; set; }
+        public bool IsInitial { get; set; }
+        public List<RepoChangeObjAndOperGroupInfo> OperationsList { get; set; } = new List<RepoChangeObjAndOperGroupInfo>();
+
+        public int ChangesCount
+        {
+            get
+            {
+                return OperationsList.Sum(c => c.ChangesCount);
+            }
+        }
+        public DateTime? FirstModificationTime
+        {
+            get
+            {
+                if (OperationsList.Any())
+                    return OperationsList.Min(c => c.FirstModificationTime);
+                return null;
+            }
+        }
+        public DateTime? LastModificationTime
+        {
+            get
+            {
+                if (OperationsList.Any())
+                    return OperationsList.Max(c => c.LastModificationTime);
+                return null;
+            }
+        }
+    }
+
+    public class RepoChangeDBSchemaGroupInfo
+    {
+        public string DBId { get; set; }
+        public string UserName { get; set; }
+        public List<RepoChangeCommitGroupInfo> CommitsList { get; set; } = new List<RepoChangeCommitGroupInfo>();
+
+        public int ChangesCount
+        {
+            get
+            {
+                return CommitsList.Sum(c => c.ChangesCount);
+            }
+        }
+        public DateTime? FirstModificationTime
+        {
+            get
+            {
+                if (CommitsList.Any())
+                    return CommitsList.Min(c => c.FirstModificationTime);
+                return null;
+            }
+        }
+        public DateTime? LastModificationTime
+        {
+            get
+            {
+                if (CommitsList.Any())
+                    return CommitsList.Max(c => c.LastModificationTime);
+                return null;
+            }
+        }
+    }
+
     public class ExportProgressData
     {
         public string ProcessId { get; set; }
@@ -25,6 +102,68 @@ namespace OracleStructExporter.Core
         public int? MetaObjCountFact { get; set; }
         public int? ErrorsCount { get; set; }
 
+        public List<RepoChangeItem> RepoChangesPlainList
+        {
+            get
+            {
+                return GetAddInfo<List<RepoChangeItem>>("REPO_CHANGES");
+            }
+        }
+
+        public List<RepoChangeDBSchemaGroupInfo> RepoChanges
+        {
+            get
+            {
+                var res = new List<RepoChangeDBSchemaGroupInfo>();
+                var items = RepoChangesPlainList;
+                if (items != null && items.Any())
+                {
+                    foreach (var dbIdGroup in items.GroupBy(c => c.DBId))
+                    {
+                        var dbId = dbIdGroup.Key;
+                        foreach (var dbUserNameGroup in dbIdGroup.GroupBy(c => c.UserName))
+                        {
+                            var resItem = new RepoChangeDBSchemaGroupInfo
+                            {
+                                DBId = dbId,
+                                UserName = dbUserNameGroup.Key
+                            };
+                            res.Add(resItem);
+                            foreach (var dbCommitGroup in dbUserNameGroup.GroupBy((c =>
+                                         new Tuple<int, DateTime, bool>(c.ProcessId, c.CommitCommonDate, c.IsInitial))))
+                            {
+                                var commitItem = new RepoChangeCommitGroupInfo
+                                {
+                                    ProcessId = dbCommitGroup.Key.Item1,
+                                    CommitCommonDate = dbCommitGroup.Key.Item2,
+                                    IsInitial = dbCommitGroup.Key.Item3
+                                };
+                                resItem.CommitsList.Add(commitItem);
+
+                                foreach (var objAndOperGroup in dbCommitGroup.GroupBy(c =>
+                                             new Tuple<OracleObjectType, RepoOperation>(c.ObjectType, c.Operation)))
+                                {
+                                    var objItem = new RepoChangeObjAndOperGroupInfo
+                                    {
+                                        ObjectType = objAndOperGroup.Key.Item1,
+                                        Operation = objAndOperGroup.Key.Item2,
+                                        ChangesCount = objAndOperGroup.Count(),
+                                        FilesSize = objAndOperGroup.Sum(c => c.FileSize),
+                                        FirstModificationTime = objAndOperGroup.Min(c=>c.CommitCurFileTime),
+                                        LastModificationTime = objAndOperGroup.Max(c=>c.CommitCurFileTime)
+                                    };
+                                    commitItem.OperationsList.Add(objItem);
+                                }
+                            }
+                        }
+                    }
+
+                }
+
+                return res;
+            }
+        }
+
         //public int ObjectNumAddInfo { get; set; }
         //public int AllProcessErrorsCount { get; internal set; }
 
@@ -32,6 +171,7 @@ namespace OracleStructExporter.Core
         public string ErrorDetails { get; set; }
         //public string TextAddInfo { get; set; }
         public Dictionary<string,string> textAddInfo { get; set; } = new Dictionary<string,string>();
+        public Dictionary<string, object> addInfo { get; set; } = new Dictionary<string, object>();
 
         public void SetTextAddInfo(string key, string value)
         {
@@ -49,6 +189,26 @@ namespace OracleStructExporter.Core
             if (textAddInfo.ContainsKey(key))
                 return textAddInfo[key];
             return null;
+        }
+
+        public void SetddInfo(string key, object value)
+        {
+            addInfo[key] = value;
+        }
+
+        public T GetAddInfo<T>(string key)
+        {
+            if (key == null)
+            {
+                foreach (var k in addInfo.Keys)
+                {
+                    if (addInfo[k] is T)
+                        return (T)addInfo[k];
+                }
+            }
+            if (addInfo.ContainsKey(key))
+                return (T)addInfo[key];
+            return default;
         }
 
 
@@ -315,6 +475,15 @@ namespace OracleStructExporter.Core
                 return (Stage == ExportProgressDataStage.PROCESS_MAIN);
             } 
         
+        }
+
+        public bool IsEndOfSimpleRepoCreating
+        {
+            get
+            {
+                return (Stage == ExportProgressDataStage.CREATE_SIMPLE_FILE_REPO_COMMIT && Level == ExportProgressDataLevel.STAGEENDINFO);
+            }
+
         }
 
         public DateTime EventTime { get; set; }

@@ -55,11 +55,24 @@ namespace OracleStructExporter.Scheduler
                 var getStatForLastDays = 365;
                 //Статистика
                 var prefix = settings.LogSettings.DBLog.DBLogPrefix;
-                //var prefix = "OSECA";
-                var statList = exporter.GetAggrStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
-                var statInfo = logger.GetStatInfo(statList, $"Статистика за последние {getStatForLastDays} дней");
+                
+                //для отладки
+                //prefix = "OSECA";
 
-                logger.InsertStatFileLog(statInfo);
+                var statList = exporter.GetAggrStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
+                var statFullList = exporter.GetAggrFullStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
+
+                var statInfoShort = logger.GetStatInfo(statList, getStatForLastDays);
+                var statInfoFull = logger.GetStatFullInfo(statFullList, getStatForLastDays);
+                
+                //var statInfo3 = logger.GetStatInfoV3(statList, $"Статистика 3 за последние {getStatForLastDays} дней");
+                //var statInfo4 = logger.GetStatInfoV4(statList, $"Статистика 4 за последние {getStatForLastDays} дней");
+
+                logger.InsertOtherFileLog(statInfoShort, "stat.txt");
+                logger.InsertOtherFileLog(statInfoFull, "stat_full.txt");
+                
+                //logger.InsertStatFileLog(statInfo3);
+                //logger.InsertStatFileLog(statInfo4);
 
                 // Выбор заданий для обработки
                 var connectionsToProcess = SelectConnectionsToProcess(statList);
@@ -140,8 +153,6 @@ namespace OracleStructExporter.Scheduler
         static void ProgressChanged(object sender, ExportProgressChangedEventArgs e)
         {
             var progressData = e.Progress;
-            string message;
-
             if (progressData.IsProgressFromMainProcess)
             {
                 logger.InsertMainTextFileLog(progressData, true);
@@ -149,8 +160,14 @@ namespace OracleStructExporter.Scheduler
             else
             {
                 //сообщения от потоков
-                logger.InsertThreadsTextFileLog(progressData, true, out message);
+                logger.InsertThreadsTextFileLog(progressData, true, out string message);
                 logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString, settings.LogSettings.DBLog);
+                if (progressData.IsEndOfSimpleRepoCreating)
+                {
+                    logger.InsertRepoTextFileLog(progressData, true);
+                    logger.InsertRepoDBLog(progressData, true, exporter.LogDBConnectionString,
+                        settings.LogSettings.DBLog);
+                }
             }
         }
 

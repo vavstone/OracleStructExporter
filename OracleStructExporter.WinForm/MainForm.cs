@@ -235,7 +235,7 @@ namespace OracleStructExporter.WinForm
             {
                 //сообщения от потоков
                 logger.InsertThreadsTextFileLog(progressData, true, out message);
-                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString);
+                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString, settings.LogSettings.DBLog);
 
                 var currentThreadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
                     c.Connection.DBIdC.ToUpper() == progressData.CurrentConnection.DBIdC.ToUpper() &&

@@ -51,10 +51,13 @@
     <Compile Include="DBStructs\SchedulerJob.cs" />
     <Compile Include="DBStructs\TableIdentityColumnStruct.cs" />
     <Compile Include="DDLCreator.cs" />
+    <Compile Include="Enums.cs" />
     <Compile Include="ExportProgressDataLevel.cs" />
     <Compile Include="ExportProgressDataStage.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="ProgressDataManager.cs" />
+    <Compile Include="RepoChangeItem.cs" />
+    <Compile Include="SchemaWorkAggrFullStat.cs" />
     <Compile Include="SchemaWorkStat.cs" />
     <Compile Include="SchemaWorkAggrStat.cs" />
     <Compile Include="SettingsHelper.cs" />
@@ -99,7 +102,7 @@
     <Compile Include="Settings\DBLog.cs" />
     <Compile Include="Settings\OSESettings.cs" />
     <Compile Include="Settings\SchedulerSettings.cs" />
-    <Compile Include="TextTableBuilder.cs" />
+    <Compile Include="TableBuilder.cs" />
     <Compile Include="ThreadInfo.cs" />
     <Compile Include="FilesManager.cs" />
     <Compile Include="VcsManager.cs" />

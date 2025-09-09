@@ -21,7 +21,6 @@ namespace OracleStructExporter.Core
 
         public bool IsScheduled { get; set; }
         public int? OneTimePerHoursPlan { get; set; }
-
         public double? OneTimePerHoursFact { get; set; }
 
         public TimeSpan? TimeBeforePlanLaunch { get; set; }

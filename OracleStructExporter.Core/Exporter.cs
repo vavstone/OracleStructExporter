@@ -1,11 +1,9 @@
 ﻿using OracleStructExporter.Core.DBStructs;
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Data.OracleClient;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -107,7 +105,7 @@ namespace OracleStructExporter.Core
             {
                 var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, /*thread.ProcessSubFolder,*/ thread.DBSubfolder, thread.UserNameSubfolder); 
                 var destFolder = Path.Combine(thread.ExportSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, thread.UserNameSubfolder);
-                FilesManager.CleanDirectory(destFolder);
+                FilesManager.DeleteDirectory(destFolder);
                 filesCount = FilesManager.MoveDirectory(sourceFolder, destFolder);
             }
             catch (Exception ex)
@@ -143,7 +141,7 @@ namespace OracleStructExporter.Core
                     destFolder = Path.Combine(destFolder, thread.ProcessSubFolder);
                 destFolder = Path.Combine(destFolder, thread.DBSubfolder, thread.UserNameSubfolder);
                 if (thread.ExportSettings.ClearMainFolderBeforeWriting)
-                    FilesManager.CleanDirectory(destFolder);
+                    FilesManager.DeleteDirectory(destFolder);
                 filesCount = FilesManager.MoveDirectory(sourceFolder, destFolder);
             }
             catch (Exception ex)
@@ -180,6 +178,7 @@ namespace OracleStructExporter.Core
                 ExportProgressDataStage.CREATE_SIMPLE_FILE_REPO_COMMIT);
             progressManager.ReportCurrentProgress(progressData);
             int changesCount = 0;
+            List<RepoChangeItem> repoChanges = new List<RepoChangeItem>();
             try
             {
                 var sourceFolder = thread.ExportSettings.PathToExportDataMain;
@@ -187,8 +186,8 @@ namespace OracleStructExporter.Core
                     sourceFolder = Path.Combine(sourceFolder, thread.ProcessSubFolder);
                 var targetFolder = thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo;
                 var vcsManager = new VcsManager();
-                var currentRepoName = $"{thread.DBSubfolder}\\{thread.UserNameSubfolder}";
-                vcsManager.CreateCommit(sourceFolder, new List<string> { currentRepoName }, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, out changesCount);
+                //var currentRepoName = $"{thread.DBSubfolder}\\{thread.UserNameSubfolder}";
+                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, out changesCount, out repoChanges);
             }
             catch (Exception ex)
             {
@@ -199,10 +198,10 @@ namespace OracleStructExporter.Core
                 progressDatErr.ErrorDetails = ex.StackTrace;
                 progressManager.ReportCurrentProgress(progressDatErr);
             }
-
             var progressData2 = new ExportProgressData(
                 ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStage.CREATE_SIMPLE_FILE_REPO_COMMIT);
             progressData2.MetaObjCountFact = changesCount;
+            progressData2.SetddInfo("REPO_CHANGES", repoChanges);
             progressManager.ReportCurrentProgress(progressData2);
         }
 
@@ -484,7 +483,7 @@ namespace OracleStructExporter.Core
                         if (threadInfo.ExportSettings.WriteOnlyToMainDataFolder && threadInfo.ExportSettings.UseProcessesSubFoldersInMain)
                             destFolder = Path.Combine(destFolder, threadInfo.ProcessSubFolder);
                         destFolder = Path.Combine(destFolder, threadInfo.DBSubfolder, threadInfo.UserNameSubfolder);
-                        FilesManager.CleanDirectory(destFolder);
+                        FilesManager.DeleteDirectory(destFolder);
                     }
 
 
@@ -1003,6 +1002,12 @@ namespace OracleStructExporter.Core
         {
             var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
             return SchemaWorkAggrStat.GetAggrStat(plainStat, scheduledConnections);
+        }
+
+        public List<SchemaWorkAggrFullStat> GetAggrFullStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
+        {
+            var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
+            return SchemaWorkAggrFullStat.GetAggrFullStat(plainStat, scheduledConnections);
         }
 
 

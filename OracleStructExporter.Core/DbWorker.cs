@@ -1890,6 +1890,164 @@ namespace OracleStructExporter.Core
             }
         }
 
+        public static void AddCommitTypeOperOracleParams(OracleCommand cmd, string objTypePrefix, OracleObjectType? objType, RepoChangeCommitGroupInfo info)
+        {
+            int addCnt = 0;
+            int updCnt = 0;
+            int delCnt = 0; 
+            long addSize = 0;
+            long updSize = 0;
+            long delPrevSize = 0;
+
+            var items = info.OperationsList.Where(c =>
+                c.Operation == RepoOperation.ADD && (c.ObjectType == objType || objType == null)).ToList();
+            if (items.Any())
+            {
+                addCnt = items.Sum(c=>c.ChangesCount);
+                addSize = items.Sum(c => c.FilesSize);
+            }
+
+            items = info.OperationsList.Where(c =>
+                c.Operation == RepoOperation.UPD && (c.ObjectType == objType || objType == null)).ToList();
+            if (items != null)
+            {
+                updCnt = items.Sum(c => c.ChangesCount);
+                updSize = items.Sum(c => c.FilesSize);
+            }
+
+            items = info.OperationsList.Where(c =>
+                c.Operation == RepoOperation.DEL && (c.ObjectType == objType || objType == null)).ToList();
+            if (items != null)
+            {
+                delCnt = items.Sum(c => c.ChangesCount);
+                delPrevSize = items.Sum(c => c.FilesSize);
+            }
+
+            cmd.Parameters.Add($"{objTypePrefix}_add_cnt", OracleType.Number).Value = addCnt;
+            cmd.Parameters.Add($"{objTypePrefix}_add_size", OracleType.Number).Value = addSize;
+            cmd.Parameters.Add($"{objTypePrefix}_upd_cnt", OracleType.Number).Value = updCnt;
+            cmd.Parameters.Add($"{objTypePrefix}_upd_size", OracleType.Number).Value = updSize;
+            cmd.Parameters.Add($"{objTypePrefix}_del_cnt", OracleType.Number).Value = delCnt;
+            cmd.Parameters.Add($"{objTypePrefix}_del_prev_size", OracleType.Number).Value = delPrevSize;
+        }
+
+
+        public static void SaveRepoChangesInDB(string prefix, ExportProgressData progressData, string connectionString,
+            DBLog dbLogSettings, bool saveDetails)
+        {
+
+            var repoChanges = progressData.RepoChanges;
+            if (repoChanges != null && repoChanges.Any())
+            {
+                var query =
+                $@"insert into {prefix}COMMITS (id, process_id, dbid, username, commit_common_date, is_initial, 
+                    dbl_add_cnt, dbl_add_size, dbl_upd_cnt, dbl_upd_size, dbl_del_cnt, dbl_del_prev_size, 
+                    dbj_add_cnt, dbj_add_size, dbj_upd_cnt, dbj_upd_size, dbj_del_cnt, dbj_del_prev_size, 
+                    fnc_add_cnt, fnc_add_size, fnc_upd_cnt, fnc_upd_size, fnc_del_cnt, fnc_del_prev_size, 
+                    pkg_add_cnt, pkg_add_size, pkg_upd_cnt, pkg_upd_size, pkg_del_cnt, pkg_del_prev_size, 
+                    prc_add_cnt, prc_add_size, prc_upd_cnt, prc_upd_size, prc_del_cnt, prc_del_prev_size, 
+                    scj_add_cnt, scj_add_size, scj_upd_cnt, scj_upd_size, scj_del_cnt, scj_del_prev_size, 
+                    seq_add_cnt, seq_add_size, seq_upd_cnt, seq_upd_size, seq_del_cnt, seq_del_prev_size, 
+                    syn_add_cnt, syn_add_size, syn_upd_cnt, syn_upd_size, syn_del_cnt, syn_del_prev_size, 
+                    tab_add_cnt, tab_add_size, tab_upd_cnt, tab_upd_size, tab_del_cnt, tab_del_prev_size, 
+                    trg_add_cnt, trg_add_size, trg_upd_cnt, trg_upd_size, trg_del_cnt, trg_del_prev_size, 
+                    tps_add_cnt, tps_add_size, tps_upd_cnt, tps_upd_size, tps_del_cnt, tps_del_prev_size, 
+                    viw_add_cnt, viw_add_size, viw_upd_cnt, viw_upd_size, viw_del_cnt, viw_del_prev_size, 
+                    all_add_cnt, all_add_size, all_upd_cnt, all_upd_size, all_del_cnt, all_del_prev_size) values 
+                    ({prefix}COMMITS_SEQ.Nextval, :process_id, :dbid, :username, :commit_common_date, :is_initial,
+                    :dbl_add_cnt, :dbl_add_size, :dbl_upd_cnt, :dbl_upd_size, :dbl_del_cnt, :dbl_del_prev_size,
+                    :dbj_add_cnt, :dbj_add_size, :dbj_upd_cnt, :dbj_upd_size, :dbj_del_cnt, :dbj_del_prev_size,
+                    :fnc_add_cnt, :fnc_add_size, :fnc_upd_cnt, :fnc_upd_size, :fnc_del_cnt, :fnc_del_prev_size,
+                    :pkg_add_cnt, :pkg_add_size, :pkg_upd_cnt, :pkg_upd_size, :pkg_del_cnt, :pkg_del_prev_size,
+                    :prc_add_cnt, :prc_add_size, :prc_upd_cnt, :prc_upd_size, :prc_del_cnt, :prc_del_prev_size,
+                    :scj_add_cnt, :scj_add_size, :scj_upd_cnt, :scj_upd_size, :scj_del_cnt, :scj_del_prev_size,
+                    :seq_add_cnt, :seq_add_size, :seq_upd_cnt, :seq_upd_size, :seq_del_cnt, :seq_del_prev_size,
+                    :syn_add_cnt, :syn_add_size, :syn_upd_cnt, :syn_upd_size, :syn_del_cnt, :syn_del_prev_size,
+                    :tab_add_cnt, :tab_add_size, :tab_upd_cnt, :tab_upd_size, :tab_del_cnt, :tab_del_prev_size,
+                    :trg_add_cnt, :trg_add_size, :trg_upd_cnt, :trg_upd_size, :trg_del_cnt, :trg_del_prev_size,
+                    :tps_add_cnt, :tps_add_size, :tps_upd_cnt, :tps_upd_size, :tps_del_cnt, :tps_del_prev_size,
+                    :viw_add_cnt, :viw_add_size, :viw_upd_cnt, :viw_upd_size, :viw_del_cnt, :viw_del_prev_size,
+                    :all_add_cnt, :all_add_size, :all_upd_cnt, :all_upd_size, :all_del_cnt, :all_del_prev_size)";
+
+                using (OracleConnection connection = new OracleConnection(connectionString))
+                {
+                    connection.Open();
+                    foreach (var dbAndUserItem in repoChanges)
+                    {
+                        foreach (var commitItem in dbAndUserItem.CommitsList)
+                        {
+                            using (OracleCommand cmd = new OracleCommand(query, connection))
+                            {
+                                cmd.Parameters.Clear();
+                                cmd.Parameters.Add("process_id", OracleType.Number).Value = commitItem.ProcessId;
+                                cmd.Parameters.Add("dbid", OracleType.VarChar).Value = dbAndUserItem.DBId;
+                                cmd.Parameters.Add("username", OracleType.VarChar).Value = dbAndUserItem.UserName;
+                                cmd.Parameters.Add("commit_common_date", OracleType.DateTime).Value = commitItem.CommitCommonDate;
+                                cmd.Parameters.Add("is_initial", OracleType.Number).Value = commitItem.IsInitial;
+
+                                AddCommitTypeOperOracleParams(cmd, "dbl", OracleObjectType.DBLINK, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "dbj", OracleObjectType.DBMS_JOB, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "fnc", OracleObjectType.FUNCTION, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "pkg", OracleObjectType.PACKAGE, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "prc", OracleObjectType.PROCEDURE, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "scj", OracleObjectType.SCHEDULER_JOB, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "seq", OracleObjectType.SEQUENCE, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "syn", OracleObjectType.SYNONYM, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "tab", OracleObjectType.TABLE, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "trg", OracleObjectType.TRIGGER, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "tps", OracleObjectType.TYPE, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "viw", OracleObjectType.VIEW, commitItem);
+                                AddCommitTypeOperOracleParams(cmd, "all", null, commitItem);
+
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                    
+                }
+
+                if (saveDetails)
+                {
+
+                    var repoChangesPlainList = progressData.RepoChangesPlainList;
+                    if (repoChangesPlainList != null && repoChangesPlainList.Any())
+                    {
+                        query =
+                            $@"insert into {prefix}COMMITDETAILS (id, process_id, dbid, username, commit_common_date, is_initial, 
+                    commit_cur_file_time,commit_oper,commit_file,commit_file_size,obj_type) values 
+                    ({prefix}COMMITDETAILS_SEQ.Nextval, :process_id, :dbid, :username, :commit_common_date, :is_initial, 
+                    :commit_cur_file_time,:commit_oper,:commit_file,:commit_file_size,:obj_type)";
+
+                        using (OracleConnection connection = new OracleConnection(connectionString))
+                        {
+                            connection.Open();
+                            foreach (var repoItem in repoChangesPlainList)
+                            {
+                                using (OracleCommand cmd = new OracleCommand(query, connection))
+                                {
+                                    cmd.Parameters.Clear();
+                                    cmd.Parameters.Add("process_id", OracleType.Number).Value = repoItem.ProcessId;
+                                    cmd.Parameters.Add("dbid", OracleType.VarChar).Value = repoItem.DBId;
+                                    cmd.Parameters.Add("username", OracleType.VarChar).Value = repoItem.UserName;
+                                    cmd.Parameters.Add("commit_common_date", OracleType.DateTime).Value =
+                                        repoItem.CommitCommonDate;
+                                    cmd.Parameters.Add("is_initial", OracleType.Number).Value = repoItem.IsInitial;
+                                    cmd.Parameters.Add("commit_cur_file_time", OracleType.DateTime).Value =
+                                        repoItem.CommitCurFileTime;
+                                    cmd.Parameters.Add("commit_oper", OracleType.Number).Value = repoItem.Operation;
+                                    cmd.Parameters.Add("commit_file", OracleType.VarChar).Value = repoItem.FileName;
+                                    cmd.Parameters.Add("commit_file_size", OracleType.Number).Value = repoItem.FileSize;
+                                    cmd.Parameters.Add("obj_type", OracleType.Number).Value = repoItem.ObjectType;
+                                    cmd.ExecuteNonQuery();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
         public static void SaveConnWorkLogInDB(string prefix, ExportProgressData progressData, string connectionString, DBLog dbLogSettings)
         {
             //try

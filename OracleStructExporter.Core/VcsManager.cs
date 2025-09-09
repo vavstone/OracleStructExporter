@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace OracleStructExporter.Core
 {
@@ -122,53 +125,122 @@ namespace OracleStructExporter.Core
             }
         }
 
-        public void CreateCommit(string inputFolder, List<string> repolist, string vcsFolder, int processId, DateTime commitDate, out int changesCount)
+        public void CreateCommit(string inputFolder, string dbSubfolder, string userNameSubfolder, string vcsFolder,
+            int processId, DateTime commitDate, out int changesCount, out List<RepoChangeItem> repoChanges)
         {
+            var repo = $"{dbSubfolder}\\{userNameSubfolder}";
             changesCount = 0;
+            repoChanges = new List<RepoChangeItem>();
             string tmpPath = Path.Combine(vcsFolder, "tmp");
             var commitName = GetCommitName(commitDate, processId.ToString());
-            string currentCommitDir = Path.Combine(tmpPath, commitName);
+            string currentCommitTmpDir = Path.Combine(tmpPath, commitName);
 
             //FilesManager.CleanDirectory(tmpPath);
 
-            foreach (var repo in repolist)
+            //foreach (var repo in repolist)
+            //{
+            string repoInputPath = Path.Combine(inputFolder, repo);
+            if (!Directory.Exists(repoInputPath)) return;
+
+            string previousSnapshotPath = Path.Combine(currentCommitTmpDir, "previous", repo);
+            FilesManager.DeleteDirectory(previousSnapshotPath);
+            int snapshotFilesCount;
+            bool snapshotExists = CreateRepoSnapshot(repo, vcsFolder, previousSnapshotPath, null,
+                DateTime.Now.AddDays(1), out snapshotFilesCount);
+
+            if (!snapshotExists)
             {
-                string repoInputPath = Path.Combine(inputFolder, repo);
-                if (!Directory.Exists(repoInputPath)) continue;
-
-                string previousSnapshotPath = Path.Combine(currentCommitDir, "previous", repo);
-                FilesManager.CleanDirectory(previousSnapshotPath);
-                int snapshotFilesCount;
-                bool snapshotExists = CreateRepoSnapshot(repo, vcsFolder, previousSnapshotPath, null, DateTime.Now.AddDays(1), out snapshotFilesCount);
-
-                if (!snapshotExists)
-                {
-                    // Добавление нового репозитория в initial
-                    string initialCommitDir = Path.Combine(vcsFolder, "initial", commitName, repo);
-                    //CopyDirectory(repoInputPath, Path.Combine(initialCommitDir, repo), out changesCount);
-                    changesCount = FilesManager.CopyDirectory(repoInputPath, initialCommitDir);
-                    //FilesManager.CleanDirectory(tmpPath);
-                    return;
-                }
-
+                // Добавление нового репозитория в initial
+                string initialCommitDir = Path.Combine(vcsFolder, "initial", commitName, repo);
+                //CopyDirectory(repoInputPath, Path.Combine(initialCommitDir, repo), out changesCount);
+                //changesCount = FilesManager.CopyDirectory(repoInputPath, initialCommitDir);
+                changesCount = CreateInitialCommit(repoInputPath, initialCommitDir, processId, commitDate, dbSubfolder, userNameSubfolder, out repoChanges);
+                //FilesManager.CleanDirectory(tmpPath);
+            }
+            else
+            {
                 // Сравнение и создание дельты
-                string tmpDeltaPath = Path.Combine(currentCommitDir, "new", repo);
-                FilesManager.CleanDirectory(tmpDeltaPath);
-                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath);
+                string tmpDeltaPath = Path.Combine(currentCommitTmpDir, "new", repo);
+                FilesManager.DeleteDirectory(tmpDeltaPath);
+                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, out repoChanges);
 
-                // Перенос дельты в commits
-                string finalCommitPath = Path.Combine(vcsFolder, "commits", commitName, repo);
-                //MoveDirectory(Path.Combine(currentCommitDir, "new"), finalCommitPath, out changesCount);
-                changesCount = FilesManager.MoveDirectory(tmpDeltaPath, finalCommitPath);
-                FilesManager.CleanDirectory(tmpDeltaPath);
-                FilesManager.CleanDirectory(previousSnapshotPath);
+                if (repoChanges.Any())
+                {
+                    // Перенос дельты в commits
+                    string finalCommitPath = Path.Combine(vcsFolder, "commits", commitName, repo);
+                    //MoveDirectory(Path.Combine(currentCommitDir, "new"), finalCommitPath, out changesCount);
+                    changesCount = FilesManager.MoveDirectory(tmpDeltaPath, finalCommitPath);
+                }
             }
 
-            
+            // Удаляем из временной папку папку коммита
+            FilesManager.DeleteDirectory(currentCommitTmpDir);
+            //FilesManager.DeleteDirectory(tmpDeltaPath);
+            //FilesManager.DeleteDirectory(previousSnapshotPath);
+
+
+            //}
+
         }
 
-        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath)
+        OracleObjectType GetOracleObjTypeByFolderName(string folderName)
         {
+            switch (folderName.ToLower())
+            {
+                case "dblinks": return OracleObjectType.DBLINK;
+                case "dbms_jobs": return OracleObjectType.DBMS_JOB;
+                case "functions": return OracleObjectType.FUNCTION;
+                case "packages": return OracleObjectType.PACKAGE;
+                case "procedures": return OracleObjectType.PROCEDURE;
+                case "scheduler_jobs": return OracleObjectType.SCHEDULER_JOB;
+                case "sequences": return OracleObjectType.SEQUENCE;
+                case "synonyms": return OracleObjectType.SYNONYM;
+                case "tables": return OracleObjectType.TABLE;
+                case "triggers": return OracleObjectType.TRIGGER;
+                case "types": return OracleObjectType.TYPE;
+                case "views": return OracleObjectType.VIEW;
+                default: return OracleObjectType.UNKNOWN;
+            }
+        }
+
+        private int CreateInitialCommit(string sourceDir, string destDir, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, out List<RepoChangeItem> repoChanges)
+        {
+            repoChanges = new List<RepoChangeItem>();
+            if (!Directory.Exists(destDir))
+                Directory.CreateDirectory(destDir);
+            var filesCounter = 0;
+            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                var currentFileFolder = FilesManager.GetCurrentFolderName(file);
+                var addItem = new RepoChangeItem
+                {
+                    FileName = Path.GetFileName(file),
+                    DBId = dbSubfolder,
+                    UserName = userNameSubfolder,
+                    ProcessId = processId,
+                    CommitCommonDate = commitDate,
+                    ObjectType = GetOracleObjTypeByFolderName(currentFileFolder),
+                    Operation = RepoOperation.ADD,
+                    IsInitial = true,
+                    CommitCurFileTime = FilesManager.GetLastFileDate(file),
+                    FileSize = FilesManager.GetFileSizeInBytes(file)
+                };
+
+                string relativePath = file.Substring(sourceDir.Length + 1);
+                string destFile = Path.Combine(destDir, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+                File.Copy(file, destFile, true);
+                filesCounter++;
+
+                repoChanges.Add(addItem);
+            }
+            return filesCounter;
+        }
+
+        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, out List<RepoChangeItem> repoChanges)
+        {
+            repoChanges = new List<RepoChangeItem>();
+
             var inputFiles = Directory.GetFiles(inputPath, "*", SearchOption.AllDirectories);
             var previousFiles = Directory.GetFiles(previousPath, "*", SearchOption.AllDirectories);
 
@@ -179,10 +251,32 @@ namespace OracleStructExporter.Core
                 string prevFile = Path.Combine(previousPath, relativePath);
                 string deltaFile = Path.Combine(deltaPath, relativePath);
 
+                var currentFileFolder = FilesManager.GetCurrentFolderName(file);
+
                 if (!File.Exists(prevFile) || !FilesAreEqual(file, prevFile))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
                     File.Copy(file, deltaFile);
+                    var addOrUpdItem = new RepoChangeItem
+                    {
+                        FileName = Path.GetFileName(file), DBId = dbSubfolder, UserName = userNameSubfolder,
+                        ProcessId = processId, CommitCommonDate = commitDate,
+                        ObjectType = GetOracleObjTypeByFolderName(currentFileFolder),
+                        IsInitial = false,
+                        CommitCurFileTime = FilesManager.GetLastFileDate(file),
+                        FileSize = FilesManager.GetFileSizeInBytes(file)
+                    };
+                    if (!File.Exists(prevFile))
+                    {
+                        //новый файл
+                        addOrUpdItem.Operation = RepoOperation.ADD;
+                    }
+                    else
+                    {
+                        //измененный файл
+                        addOrUpdItem.Operation = RepoOperation.UPD;
+                    }
+                    repoChanges.Add(addOrUpdItem);
                 }
             }
 
@@ -191,12 +285,29 @@ namespace OracleStructExporter.Core
             {
                 string relativePath = file.Substring(previousPath.Length + 1);
                 string inputFile = Path.Combine(inputPath, relativePath);
-                string deltaFile = Path.Combine(deltaPath, relativePath);
 
                 if (!File.Exists(inputFile))
                 {
+                    string deltaFile = Path.Combine(deltaPath, relativePath);
                     Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
                     File.WriteAllBytes(deltaFile, new byte[0]); // Пустой файл как флаг удаления
+                    var currentFileFolder = FilesManager.GetCurrentFolderName(file);
+                    //удаленный файл
+                    var delItem = new RepoChangeItem
+                    {
+                        FileName = Path.GetFileName(file),
+                        DBId = dbSubfolder,
+                        UserName = userNameSubfolder,
+                        ProcessId = processId,
+                        CommitCommonDate = commitDate,
+                        ObjectType = GetOracleObjTypeByFolderName(currentFileFolder),
+                        Operation = RepoOperation.DEL,
+                        IsInitial = false,
+                        CommitCurFileTime = FilesManager.GetLastFileDate(file),
+                        //здесь считаем размер прошлой версии удаленного файла, так как новая версия - всегда нулевая
+                        FileSize = FilesManager.GetFileSizeInBytes(file)
+                    };
+                    repoChanges.Add(delItem);
                 }
             }
         }
