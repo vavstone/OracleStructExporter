@@ -22,7 +22,7 @@ namespace OracleStructExporter.Core
         public DateTime? LastErrorLaunchFactTime { get; set; }
         public DateTime? LastLaunchFactTime { get; set; }
         public int? LastSuccessLaunchAllObjectsFactCount { get; set; }
-        public double? LastSuccessLaunchDuration { get; set; }
+        public TimeSpan? LastSuccessLaunchDuration { get; set; }
 
 
         //Считаем в разрезе интервалов
@@ -58,20 +58,28 @@ namespace OracleStructExporter.Core
         public double? FromAllTime { get; set; }
 
         public int? LastSuccessLaunchCommitObjectsFactCount { get; set; }
-        public double? AvgSuccessLaunchCommitObjectsFactCount7 { get; set; }
-        public double? AvgSuccessLaunchCommitObjectsFactCount30 { get; set; }
-        public double? AvgSuccessLaunchCommitObjectsFactCount90 { get; set; }
-        public double? AvgSuccessLaunchCommitObjectsFactCount { get; set; }
+        public int? SumSuccessLaunchCommitObjectsFactCount7 { get; set; }
+        public int? SumSuccessLaunchCommitObjectsFactCount30 { get; set; }
+        public int? SumSuccessLaunchCommitObjectsFactCount90 { get; set; }
+        public int? SumSuccessLaunchCommitObjectsFactCount { get; set; }
 
         public double? AvgSuccessLaunchAllObjectsFactCount7 { get; set; }
         public double? AvgSuccessLaunchAllObjectsFactCount30 { get; set; }
         public double? AvgSuccessLaunchAllObjectsFactCount90 { get; set; }
         public double? AvgSuccessLaunchAllObjectsFactCount { get; set; }
 
-        public static List<SchemaWorkAggrFullStat> GetAggrFullStat(List<SchemaWorkStat> plainStat, List<ConnectionToProcess> scheduledConnections)
+        static SchemaWorkStat GetStartItemAndDuration(SchemaWorkStat endItem, List<SchemaWorkStat> allItems, out TimeSpan? duration)
         {
+            duration = default;
+            var startItem = allItems.FirstOrDefault(c => c.ProcessId == endItem.ProcessId && c.Level == ExportProgressDataLevel.STAGESTARTINFO);
+            if (startItem != null)
+                duration = endItem.EventTime - startItem.EventTime;
+            return startItem;
+        }
 
-            var res = scheduledConnections.
+        public static List<SchemaWorkAggrFullStat> GetAggrFullStat(List<SchemaWorkStat> plainStat, List<AppWorkStat> workStat, List<CommitStat> commitStat, List<ConnectionToProcess> scheduledConnections, int maxInterval)
+        {
+            var statList = scheduledConnections.
                 //Select(c=>new Tuple<string,string>(c.DbId.ToUpper(),c.UserName.ToUpper())).
                 //Distinct().
                 Select(c => new SchemaWorkAggrFullStat
@@ -81,12 +89,14 @@ namespace OracleStructExporter.Core
                     OneTimePerHoursPlan = c.OneSuccessResultPerHours,
                     IsScheduled = c.Enabled
                 }).ToList();
+            var notInitialCommits = commitStat.Where(c => !c.IsInitial).ToList();
+
             foreach (var item in plainStat.Select(c=>new Tuple<string,string>(c.DBId, c.UserName)).Distinct())
             {
-                if (!res.Any(c => c.DBId == item.Item1 && c.UserName == item.Item2))
+                if (!statList.Any(c => c.DBId == item.Item1 && c.UserName == item.Item2))
                 {
-                    
-                    res.Add(new SchemaWorkAggrFullStat
+
+                    statList.Add(new SchemaWorkAggrFullStat
                     {
                         DBId = item.Item1,
                         UserName = item.Item2,
@@ -96,121 +106,208 @@ namespace OracleStructExporter.Core
                 }
             }
 
-            foreach (var statItem in res)
+            foreach (var statItem in statList)
             {
-
-                FillAggrFullStatItemForInterval(plainStat, statItem, Interval7);
-                FillAggrFullStatItemForInterval(plainStat, statItem, Interval30);
-                FillAggrFullStatItemForInterval(plainStat, statItem, Interval90);
-                FillAggrFullStatItemForInterval(plainStat, statItem, null);
+                FillAggrFullStatItemForInterval(plainStat, workStat, notInitialCommits, statItem, maxInterval, Interval7);
+                FillAggrFullStatItemForInterval(plainStat, workStat, notInitialCommits, statItem, maxInterval, Interval30);
+                FillAggrFullStatItemForInterval(plainStat, workStat, notInitialCommits, statItem, maxInterval, Interval90);
+                FillAggrFullStatItemForInterval(plainStat, workStat, notInitialCommits, statItem, maxInterval, null);
             }
+
+            var res = statList.
+                OrderBy(c => c.IsScheduled ? 0 : 1).
+                ThenBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.Zero).
+                ThenBy(c => c.DBId).
+                ThenBy(c => c.UserName).
+                ToList();
 
             return res;
         }
 
-        static void FillAggrFullStatItemForInterval(List<SchemaWorkStat> plainStat, SchemaWorkAggrFullStat item, int? interval)
+        static TimeSpan GetDuration(DateTime forDate, int daysAgo)
+        {
+            return forDate - forDate.AddDays(-daysAgo);
+        }
+
+        static void FillAggrFullStatItemForInterval(List<SchemaWorkStat> plainStat, List<AppWorkStat> workStat, List<CommitStat> commitStat, SchemaWorkAggrFullStat item, int maxInterval, int? interval)
         {
             var now = DateTime.Now;
-            var allEnded = plainStat.Where(c =>
-                    c.DBId == item.DBId && c.UserName == item.UserName &&
-                    c.Level == ExportProgressDataLevel.STAGEENDINFO && 
-                    c.ErrorsCount != null &&
-                    (interval==null || c.EventTime>= now.AddDays(-interval.Value))).ToList();
-            var successEnded = allEnded.Where(c => c.ErrorsCount == 0).ToList();
-            var errorsEnded = allEnded.Where(c => c.ErrorsCount > 0).ToList();
 
-            if (successEnded.Any())
+            var curSchemaPlainStat = plainStat.Where(c => c.DBId == item.DBId && c.UserName == item.UserName).ToList();
+            var curSchemaPlainStatEnded = curSchemaPlainStat.Where(c => c.Level == ExportProgressDataLevel.STAGEENDINFO).ToList();
+            var curSchemaPlainStatEndedInInterval = curSchemaPlainStatEnded
+                .Where(c => interval == null || c.EventTime >= now.AddDays(-interval.Value)).ToList();
+            var curSchemaPlainStatEndedInIntervalSuccess = curSchemaPlainStatEndedInInterval.Where(c => c.ErrorsCount == null|| c.ErrorsCount == 0).ToList();
+            var curSchemaPlainStatEndedInIntervalErrors = curSchemaPlainStatEndedInInterval.Where(c => c.ErrorsCount != null && c.ErrorsCount > 0).ToList();
+
+            var workStatInInterval = workStat.Where(c => interval == null || c.EndTime >= now.AddDays(-interval.Value)).ToList();
+            //для упрощения используем дату коммита
+            //var commitStatInInterval = commitStat.Where(c => interval == null || c.CommitCommonDate >= now.AddDays(-interval.Value)).ToList();
+
+            if (curSchemaPlainStatEndedInIntervalSuccess.Any())
             {
                 //Общие цифры, если задан максимальный интервал
                 if (interval == null)
                 {
-                    var lastSuccessLaunch = successEnded.OrderByDescending(c => c.EventTime).FirstOrDefault();
+                    var lastSuccessLaunch = curSchemaPlainStatEndedInIntervalSuccess.OrderByDescending(c => c.EventTime).FirstOrDefault();
                     if (lastSuccessLaunch != null)
                     {
                         item.LastSuccessLaunchFactTime = lastSuccessLaunch.EventTime;
                         item.LastSuccessLaunchAllObjectsFactCount = lastSuccessLaunch.SchemaObjCountFact;
+                        var startItem = GetStartItemAndDuration(lastSuccessLaunch, curSchemaPlainStat, out var duration);
+                        if (duration != null)
+                            item.LastSuccessLaunchDuration = duration;
+                        if (startItem != null)
+                        {
+                            var commit = commitStat.FirstOrDefault(c =>
+                                c.ProcessId == startItem.ProcessId && c.DBId == startItem.DBId &&
+                                c.UserName == startItem.UserName);
+                            if (commit != null)
+                                item.LastSuccessLaunchCommitObjectsFactCount = commit.AllCnt;
+                            else
+                                item.LastSuccessLaunchCommitObjectsFactCount = 0;
+                        }
                     }
-                    
                 }
 
                 if (interval==null) 
-                    item.SuccessLaunchesCount = successEnded.Count;
+                    item.SuccessLaunchesCount = curSchemaPlainStatEndedInIntervalSuccess.Count;
                 else if (interval == Interval7)
-                    item.SuccessLaunchesCount7 = successEnded.Count;
+                    item.SuccessLaunchesCount7 = curSchemaPlainStatEndedInIntervalSuccess.Count;
                 else if (interval == Interval30)
-                    item.SuccessLaunchesCount30 = successEnded.Count;
+                    item.SuccessLaunchesCount30 = curSchemaPlainStatEndedInIntervalSuccess.Count;
                 else if (interval == Interval90)
-                    item.SuccessLaunchesCount90 = successEnded.Count;
+                    item.SuccessLaunchesCount90 = curSchemaPlainStatEndedInIntervalSuccess.Count;
 
                 if (interval == null)
-                    item.AvgSuccessLaunchAllObjectsFactCount = successEnded.Average(c => c.SchemaObjCountFact);
+                    item.AvgSuccessLaunchAllObjectsFactCount = curSchemaPlainStatEndedInIntervalSuccess.Average(c => c.SchemaObjCountFact);
                 else if (interval == Interval7)
-                    item.AvgSuccessLaunchAllObjectsFactCount7 = successEnded.Average(c => c.SchemaObjCountFact);
+                    item.AvgSuccessLaunchAllObjectsFactCount7 = curSchemaPlainStatEndedInIntervalSuccess.Average(c => c.SchemaObjCountFact);
                 else if (interval == Interval30)
-                    item.AvgSuccessLaunchAllObjectsFactCount30 = successEnded.Average(c => c.SchemaObjCountFact);
+                    item.AvgSuccessLaunchAllObjectsFactCount30 = curSchemaPlainStatEndedInIntervalSuccess.Average(c => c.SchemaObjCountFact);
                 else if (interval == Interval90)
-                    item.AvgSuccessLaunchAllObjectsFactCount90 = successEnded.Average(c => c.SchemaObjCountFact);
+                    item.AvgSuccessLaunchAllObjectsFactCount90 = curSchemaPlainStatEndedInIntervalSuccess.Average(c => c.SchemaObjCountFact);
 
                 
-                List<TimeSpan> durations = new List<TimeSpan>();
-                foreach (var endItem in successEnded)
+                List<TimeSpan> durationsSuccess = new List<TimeSpan>();
+                List<int> commitsCountList = new List<int>();
+                foreach (var endItem in curSchemaPlainStatEndedInIntervalSuccess)
                 {
-                    var startItem = plainStat.FirstOrDefault(c => c.ProcessId == endItem.ProcessId && c.Level == ExportProgressDataLevel.STAGESTARTINFO);
+                    var startItem = GetStartItemAndDuration(endItem, curSchemaPlainStat, out var duration);
+                    if (duration != null)
+                        durationsSuccess.Add(duration.Value);
+
                     if (startItem != null)
-                        durations.Add(endItem.EventTime - startItem.EventTime);
+                    {
+                        var commit = commitStat.FirstOrDefault(c =>
+                            c.ProcessId == startItem.ProcessId && c.DBId == startItem.DBId &&
+                            c.UserName == startItem.UserName);
+                        if (commit != null)
+                            commitsCountList.Add(commit.AllCnt);
+                        else
+                            commitsCountList.Add(0);
+                    }
                 }
 
-                if (durations.Any())
+                if (commitsCountList.Any())
                 {
                     if (interval == null)
-                        item.AvgSuccessLaunchDurationInMinutes = durations.Average(c => c.TotalMinutes);
+                        item.SumSuccessLaunchCommitObjectsFactCount = commitsCountList.Sum();
                     else if (interval == Interval7)
-                        item.AvgSuccessLaunchDurationInMinutes7 = durations.Average(c => c.TotalMinutes);
+                        item.SumSuccessLaunchCommitObjectsFactCount7 = commitsCountList.Sum();
                     else if (interval == Interval30)
-                        item.AvgSuccessLaunchDurationInMinutes30 = durations.Average(c => c.TotalMinutes);
+                        item.SumSuccessLaunchCommitObjectsFactCount30 = commitsCountList.Sum();
                     else if (interval == Interval90)
-                        item.AvgSuccessLaunchDurationInMinutes90 = durations.Average(c => c.TotalMinutes);
+                        item.SumSuccessLaunchCommitObjectsFactCount90 = commitsCountList.Sum();
+                }
+
+
+                var durationsAppWork = new List<TimeSpan>();
+                foreach (var appWorkStat in workStatInInterval)
+                {
+                    durationsAppWork.Add(appWorkStat.EndTime - appWorkStat.StartTime);
+                }
+
+                double? durationAppWorkSumInMilliseconds = null;
+                if (durationsAppWork.Any())
+                    durationAppWorkSumInMilliseconds = durationsAppWork.Sum(c => c.TotalMilliseconds);
+
+                if (durationsSuccess.Any())
+                {
+                    var intervalToCheck = interval ?? maxInterval;
+                    if (interval == null)
+                    {
+                        item.AvgSuccessLaunchDurationInMinutes = durationsSuccess.Average(c => c.TotalMinutes);
+                        item.FromAllTime = durationsSuccess.Sum(c =>
+                            (c.TotalMilliseconds) / GetDuration(now, intervalToCheck).TotalMilliseconds) * 100;
+                        if (durationAppWorkSumInMilliseconds != null && durationAppWorkSumInMilliseconds.Value > 0)
+                            item.FromAppTime = durationsSuccess.Sum(c => c.TotalMilliseconds) / durationAppWorkSumInMilliseconds * 100;
+                    }
+                    else if (interval == Interval7)
+                    {
+                        item.AvgSuccessLaunchDurationInMinutes7 = durationsSuccess.Average(c => c.TotalMinutes);
+                        item.FromAllTime7 = durationsSuccess.Sum(c =>
+                            (c.TotalMilliseconds) / GetDuration(now, intervalToCheck).TotalMilliseconds) * 100;
+                        if (durationAppWorkSumInMilliseconds != null && durationAppWorkSumInMilliseconds.Value > 0)
+                            item.FromAppTime7 = durationsSuccess.Sum(c => c.TotalMilliseconds) / durationAppWorkSumInMilliseconds * 100;
+                    }
+                    else if (interval == Interval30)
+                    {
+                        item.AvgSuccessLaunchDurationInMinutes30 = durationsSuccess.Average(c => c.TotalMinutes);
+                        item.FromAllTime30 = durationsSuccess.Sum(c =>
+                            (c.TotalMilliseconds) / GetDuration(now, intervalToCheck).TotalMilliseconds) * 100;
+                        if (durationAppWorkSumInMilliseconds != null && durationAppWorkSumInMilliseconds.Value > 0)
+                            item.FromAppTime30 = durationsSuccess.Sum(c => c.TotalMilliseconds) / durationAppWorkSumInMilliseconds * 100;
+                    }
+                    else if (interval == Interval90)
+                    {
+                        item.AvgSuccessLaunchDurationInMinutes90 = durationsSuccess.Average(c => c.TotalMinutes);
+                        item.FromAllTime90 = durationsSuccess.Sum(c =>
+                            (c.TotalMilliseconds) / GetDuration(now, intervalToCheck).TotalMilliseconds) * 100;
+                        if (durationAppWorkSumInMilliseconds != null && durationAppWorkSumInMilliseconds.Value > 0)
+                            item.FromAppTime90 = durationsSuccess.Sum(c => c.TotalMilliseconds) / durationAppWorkSumInMilliseconds * 100;
+                    }
                 }
                 
-                var sinceFirstSuccess = DateTime.Now - successEnded.Min(c => c.EventTime);
+                var sinceFirstSuccess = DateTime.Now - curSchemaPlainStatEndedInIntervalSuccess.Min(c => c.EventTime);
 
-                if (durations.Any())
-                {
+                //if (durations.Any())
+                //{
                     if (interval == null)
-                        item.OneTimePerHoursFact = sinceFirstSuccess.TotalHours / successEnded.Count;
+                        item.OneTimePerHoursFact = sinceFirstSuccess.TotalHours / curSchemaPlainStatEndedInIntervalSuccess.Count;
                     else if (interval == Interval7)
-                        item.OneTimePerHoursFact7 = sinceFirstSuccess.TotalHours / successEnded.Count;
+                        item.OneTimePerHoursFact7 = sinceFirstSuccess.TotalHours / curSchemaPlainStatEndedInIntervalSuccess.Count;
                     else if (interval == Interval30)
-                        item.OneTimePerHoursFact30 = sinceFirstSuccess.TotalHours / successEnded.Count;
+                        item.OneTimePerHoursFact30 = sinceFirstSuccess.TotalHours / curSchemaPlainStatEndedInIntervalSuccess.Count;
                     else if (interval == Interval90)
-                        item.OneTimePerHoursFact90 = sinceFirstSuccess.TotalHours / successEnded.Count;
-                }
+                        item.OneTimePerHoursFact90 = sinceFirstSuccess.TotalHours / curSchemaPlainStatEndedInIntervalSuccess.Count;
+                //}
             }
 
-            if (errorsEnded.Any())
+            if (curSchemaPlainStatEndedInIntervalErrors.Any())
             {
                 //Общие цифры, если задан максимальный интервал
                 if (interval == null)
                 {
-                    item.LastErrorLaunchFactTime = errorsEnded.Max(c => c.EventTime);
+                    item.LastErrorLaunchFactTime = curSchemaPlainStatEndedInIntervalErrors.Max(c => c.EventTime);
                 }
                 if (interval == null)
-                    item.ErrorLaunchesCount = errorsEnded.Count;
+                    item.ErrorLaunchesCount = curSchemaPlainStatEndedInIntervalErrors.Count;
                 else if (interval == Interval7)
-                    item.ErrorLaunchesCount7 = errorsEnded.Count;
+                    item.ErrorLaunchesCount7 = curSchemaPlainStatEndedInIntervalErrors.Count;
                 else if (interval == Interval30)
-                    item.ErrorLaunchesCount30 = errorsEnded.Count;
+                    item.ErrorLaunchesCount30 = curSchemaPlainStatEndedInIntervalErrors.Count;
                 else if (interval == Interval90)
-                    item.ErrorLaunchesCount90 = errorsEnded.Count;
+                    item.ErrorLaunchesCount90 = curSchemaPlainStatEndedInIntervalErrors.Count;
 
             }
 
-            if (allEnded.Any())
+            if (curSchemaPlainStatEndedInInterval.Any())
             {
                 //Общие цифры, если задан максимальный интервал
                 if (interval == null)
                 {
-                    item.LastLaunchFactTime = allEnded.Max(c => c.EventTime);
+                    item.LastLaunchFactTime = curSchemaPlainStatEndedInInterval.Max(c => c.EventTime);
                     if (item.IsScheduled && item.OneTimePerHoursPlan != null)
                     {
                         var nextScheduleTime = item.LastLaunchFactTime.Value.AddHours(item.OneTimePerHoursPlan.Value);

@@ -36,6 +36,7 @@ namespace OracleStructExporter.Scheduler
         {
             try
             {
+
                 LoadSettingsFromFile();
 
                 exporter = new Exporter();
@@ -53,16 +54,19 @@ namespace OracleStructExporter.Scheduler
 
                 //TODO брать из настроек
                 var getStatForLastDays = 365;
+                var testMode = false;
+
                 //Статистика
                 var prefix = settings.LogSettings.DBLog.DBLogPrefix;
                 
                 //для отладки
                 //prefix = "OSECA";
 
-                var statList = exporter.GetAggrStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
+                //var statList = exporter.GetAggrStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
                 var statFullList = exporter.GetAggrFullStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
 
-                var statInfoShort = logger.GetStatInfo(statList, getStatForLastDays);
+                //var statInfoShort = logger.GetStatInfo(statList, getStatForLastDays);
+                var statInfoShort = logger.GetStatInfoV2(statFullList, getStatForLastDays);
                 var statInfoFull = logger.GetStatFullInfo(statFullList, getStatForLastDays);
                 
                 //var statInfo3 = logger.GetStatInfoV3(statList, $"Статистика 3 за последние {getStatForLastDays} дней");
@@ -70,12 +74,13 @@ namespace OracleStructExporter.Scheduler
 
                 logger.InsertOtherFileLog(statInfoShort, "stat.txt");
                 logger.InsertOtherFileLog(statInfoFull, "stat_full.txt");
-                
+
                 //logger.InsertStatFileLog(statInfo3);
                 //logger.InsertStatFileLog(statInfo4);
 
                 // Выбор заданий для обработки
-                var connectionsToProcess = SelectConnectionsToProcess(statList);
+                //var connectionsToProcess = SelectConnectionsToProcess(statList);
+                var connectionsToProcess = Exporter.SelectConnectionsToProcess(statFullList, settings.SchedulerSettings.ConnectionsToProcess);
                 if (!connectionsToProcess.Any())
                 {
                     exporter.ReportMainProcessMessage("Нет заданий для обработки");
@@ -94,10 +99,8 @@ namespace OracleStructExporter.Scheduler
                         threadInfo.ExportSettings = settings.ExportSettings;
                         threads.Add(threadInfo);
                     }
-                    exporter.StartWork(threads, false);
+                    exporter.StartWork(threads, false, testMode);
                 }
-
-
 
                 WaitBeforeExit();
             }
@@ -106,8 +109,6 @@ namespace OracleStructExporter.Scheduler
                 Console.WriteLine(e);
                 throw;
             }
-
-            
 
             //try
             //{
@@ -149,7 +150,6 @@ namespace OracleStructExporter.Scheduler
             //}
         }
 
-
         static void ProgressChanged(object sender, ExportProgressChangedEventArgs e)
         {
             var progressData = e.Progress;
@@ -168,6 +168,8 @@ namespace OracleStructExporter.Scheduler
                     logger.InsertRepoDBLog(progressData, true, exporter.LogDBConnectionString,
                         settings.LogSettings.DBLog);
                 }
+
+                
             }
         }
 
@@ -278,6 +280,8 @@ namespace OracleStructExporter.Scheduler
             return listToProcessConnections;
 
         }
+
+        
 
         //private static int CreateProcessRecord(int connectionsCount)
         //{

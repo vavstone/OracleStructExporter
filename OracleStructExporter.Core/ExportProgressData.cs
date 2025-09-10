@@ -4,84 +4,6 @@ using System.Linq;
 
 namespace OracleStructExporter.Core
 {
-
-    public class RepoChangeObjAndOperGroupInfo
-    {
-        public OracleObjectType ObjectType { get; set; }
-        public RepoOperation Operation { get; set; }
-        public int ChangesCount { get; set; }
-        public long FilesSize { get; set; }
-        public DateTime? FirstModificationTime { get; set; }
-        public DateTime? LastModificationTime { get; set; }
-    }
-
-    public class RepoChangeCommitGroupInfo
-    {
-        public DateTime CommitCommonDate { get; set; }
-        public int ProcessId { get; set; }
-        public bool IsInitial { get; set; }
-        public List<RepoChangeObjAndOperGroupInfo> OperationsList { get; set; } = new List<RepoChangeObjAndOperGroupInfo>();
-
-        public int ChangesCount
-        {
-            get
-            {
-                return OperationsList.Sum(c => c.ChangesCount);
-            }
-        }
-        public DateTime? FirstModificationTime
-        {
-            get
-            {
-                if (OperationsList.Any())
-                    return OperationsList.Min(c => c.FirstModificationTime);
-                return null;
-            }
-        }
-        public DateTime? LastModificationTime
-        {
-            get
-            {
-                if (OperationsList.Any())
-                    return OperationsList.Max(c => c.LastModificationTime);
-                return null;
-            }
-        }
-    }
-
-    public class RepoChangeDBSchemaGroupInfo
-    {
-        public string DBId { get; set; }
-        public string UserName { get; set; }
-        public List<RepoChangeCommitGroupInfo> CommitsList { get; set; } = new List<RepoChangeCommitGroupInfo>();
-
-        public int ChangesCount
-        {
-            get
-            {
-                return CommitsList.Sum(c => c.ChangesCount);
-            }
-        }
-        public DateTime? FirstModificationTime
-        {
-            get
-            {
-                if (CommitsList.Any())
-                    return CommitsList.Min(c => c.FirstModificationTime);
-                return null;
-            }
-        }
-        public DateTime? LastModificationTime
-        {
-            get
-            {
-                if (CommitsList.Any())
-                    return CommitsList.Max(c => c.LastModificationTime);
-                return null;
-            }
-        }
-    }
-
     public class ExportProgressData
     {
         public string ProcessId { get; set; }
@@ -110,11 +32,11 @@ namespace OracleStructExporter.Core
             }
         }
 
-        public List<RepoChangeDBSchemaGroupInfo> RepoChanges
+        public List<RepoChangeDbSchemaGroupInfo> RepoChanges
         {
             get
             {
-                var res = new List<RepoChangeDBSchemaGroupInfo>();
+                var res = new List<RepoChangeDbSchemaGroupInfo>();
                 var items = RepoChangesPlainList;
                 if (items != null && items.Any())
                 {
@@ -123,7 +45,7 @@ namespace OracleStructExporter.Core
                         var dbId = dbIdGroup.Key;
                         foreach (var dbUserNameGroup in dbIdGroup.GroupBy(c => c.UserName))
                         {
-                            var resItem = new RepoChangeDBSchemaGroupInfo
+                            var resItem = new RepoChangeDbSchemaGroupInfo
                             {
                                 DBId = dbId,
                                 UserName = dbUserNameGroup.Key

@@ -1220,6 +1220,86 @@ namespace OracleStructExporter.Core
             return res;
         }
 
+
+        public List<AppWorkStat> GetAppWorkStat(int getStatForLastDays, string prefix)
+        {
+            var res = new List<AppWorkStat>();
+            try
+            {
+                string ddlQuery =
+                    $@"select id, start_time, end_time from {prefix}PROCESS where end_time is not null and id in (select process_id from {prefix}CONNWORKLOG where stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and sysdate-eventtime<:forLastDays)";
+                using (OracleConnection connection = new OracleConnection(ConnectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
+                    {
+                        cmd.Parameters.Add("forLastDays", OracleType.Number).Value = getStatForLastDays;
+                        using (OracleDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+
+                                var item = new AppWorkStat();
+                                item.ProcessId = reader.GetInt32(reader.GetOrdinal("id"));
+                                item.StartTime = reader.GetDateTime(reader.GetOrdinal("start_time"));
+                                item.EndTime = reader.GetDateTime(reader.GetOrdinal("end_time"));
+                                res.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                throw e;
+            }
+            return res;
+        }
+
+        public List<CommitStat> GetCommitStat(int getStatForLastDays, string prefix)
+        {
+            var res = new List<CommitStat>();
+            try
+            {
+                string ddlQuery =
+                    $@"select process_id, dbid, username, commit_common_date, is_initial, all_add_cnt, all_upd_cnt, all_del_cnt, all_add_size, all_upd_size, all_del_prev_size 
+                    from {prefix}COMMITS where process_id in (select process_id from {prefix}CONNWORKLOG where stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and sysdate-eventtime<:forLastDays)";
+                using (OracleConnection connection = new OracleConnection(ConnectionString))
+                {
+                    connection.Open();
+                    using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
+                    {
+                        cmd.Parameters.Add("forLastDays", OracleType.Number).Value = getStatForLastDays;
+                        using (OracleDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+
+                                var item = new CommitStat();
+                                item.ProcessId = reader.GetInt32(reader.GetOrdinal("process_id"));
+                                item.DBId = reader["dbid"].ToString().ToUpper();
+                                item.UserName = reader["username"].ToString().ToUpper();
+                                item.CommitCommonDate = reader.GetDateTime(reader.GetOrdinal("commit_common_date"));
+                                item.IsInitial = reader.GetInt32(reader.GetOrdinal("is_initial")) > 0;
+                                item.AllAddCnt = reader.GetInt32(reader.GetOrdinal("all_add_cnt"));
+                                item.AllUpdCnt = reader.GetInt32(reader.GetOrdinal("all_upd_cnt"));
+                                item.AllDelCnt = reader.GetInt32(reader.GetOrdinal("all_del_cnt"));
+                                item.AllAddSize = reader.GetInt32(reader.GetOrdinal("all_add_size"));
+                                item.AllUpdSize = reader.GetInt32(reader.GetOrdinal("all_upd_size"));
+                                item.AllDelSize = reader.GetInt32(reader.GetOrdinal("all_del_prev_size"));
+                                res.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                throw e;
+            }
+            return res;
+        }
+
         //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
         //{
         //    try

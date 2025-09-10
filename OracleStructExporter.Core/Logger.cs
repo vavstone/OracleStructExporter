@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Remoting.Messaging;
 using System.Text;
 using TableBuilder;
 
@@ -100,9 +99,33 @@ namespace OracleStructExporter.Core
 
         public void InsertRepoTextFileLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
         {
-            //TODO реализовать
-            
-            
+            //TODO брать флаг из настроек
+            var logCommitsContent = true;
+            if (progressData.Stage == ExportProgressDataStage.CREATE_SIMPLE_FILE_REPO_COMMIT &&
+                progressData.Level == ExportProgressDataLevel.STAGEENDINFO && logCommitsContent)
+            {
+                var commitsList = progressData.GetAddInfo<List<RepoChangeItem>>("REPO_CHANGES");
+                var res = $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId ?? "не задано"}{Environment.NewLine}";
+
+                res += GetCommitInfo(commitsList);
+                res += Environment.NewLine;
+                res += Environment.NewLine;
+
+                //сохраняем в файл запись лога
+                var encodingToFile1251 = Encoding.GetEncoding(1251);
+                var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
+                var fileName = Path.Combine(pathToLog,
+                    $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}_commits.txt");
+                if (!Directory.Exists(pathToLog))
+                    Directory.CreateDirectory(pathToLog);
+                using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                {
+                    // Записываем DDL объекта
+                    writer.Write(res);
+                }
+               
+            }
+
         }
 
         public void InsertMainTextFileLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
@@ -275,7 +298,7 @@ namespace OracleStructExporter.Core
                     new Column { Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left },
                     new Column { Id = "username", MaxWidth = 30, Alignment = Alignment.Left },
                     new Column { Id = "plan", MaxWidth = 7, Alignment = Alignment.Center },
-                    new Column { Id = "timebeforeplan", MaxWidth = 22, Alignment = Alignment.Right },
+                    new Column { Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right },
                     new Column { Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right },
                     new Column { Id = "oneinhoursfact", MaxWidth = 10, Alignment = Alignment.Right },
                     new Column { Id = "lastsuccess", MaxWidth = 16, Alignment = Alignment.Center },
@@ -397,6 +420,142 @@ namespace OracleStructExporter.Core
             return "Нет заданий и статистики";
         }
 
+        public string GetStatInfoV2(List<SchemaWorkAggrFullStat> statList, int lastDaysToAnalyz)
+        {
+            if (statList.Any())
+            {
+                var table = new TableBuilder.TableBuilder();
+                var columns = new List<Column>();
+                table.Columns = columns;
+
+                columns.AddRange(new[]
+                {
+                    new Column { Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left },
+                    new Column { Id = "username", MaxWidth = 30, Alignment = Alignment.Left },
+                    new Column { Id = "plan", MaxWidth = 7, Alignment = Alignment.Center },
+                    new Column { Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right },
+                    new Column { Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right },
+                    new Column { Id = "oneinhoursfact", MaxWidth = 10, Alignment = Alignment.Right },
+                    new Column { Id = "lastsuccess", MaxWidth = 16, Alignment = Alignment.Center },
+                    new Column { Id = "succsesscount", MaxWidth = 10, Alignment = Alignment.Right },
+                    new Column { Id = "lasterror", MaxWidth = 16, Alignment = Alignment.Center },
+                    new Column { Id = "errorscount", MaxWidth = 10, Alignment = Alignment.Right },
+                    new Column { Id = "avgtime", MaxWidth = 9, Alignment = Alignment.Right },
+                    new Column { Id = "avgsize", MaxWidth = 9, Alignment = Alignment.Right }
+                });
+
+                var headerRows = new List<List<HeaderCell>>();
+                table.HeaderRows = headerRows;
+
+                headerRows.Add(new List<HeaderCell>
+                {
+                    new HeaderCell { Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 12 }
+                });
+
+                headerRows.Add(new List<HeaderCell>
+                {
+                    new HeaderCell { Content = "БД", ColumnId = "dbid", RowSpan = 2},
+                    new HeaderCell { Content = "Схема", ColumnId = "username", RowSpan = 2 },
+                    new HeaderCell { Content = "План", ColumnId = "plan", RowSpan = 2 },
+                    new HeaderCell { Content = "Время до планового запуска", ColumnId = "timebeforeplan", RowSpan = 2 },
+                    new HeaderCell { Content = "Раз в X часов", ColumnId = "oneinhoursplan", ColSpan = 2},
+                    new HeaderCell { Content = "Успешные запуски", ColumnId = "lastsuccess", ColSpan = 2 },
+                    new HeaderCell { Content = "Неуспешные запуски", ColumnId = "lasterror", ColSpan = 2 },
+                    new HeaderCell { Content = "Среднее время (мин)", ColumnId = "avgtime", RowSpan = 2 },
+                    new HeaderCell { Content = "Средний объем", ColumnId = "avgsize", RowSpan = 2 }
+                });
+
+
+                headerRows.Add(new List<HeaderCell>
+                {
+
+                    new HeaderCell { Content = "план", ColumnId = "oneinhoursplan" },
+                    new HeaderCell { Content = "факт", ColumnId = "oneinhoursfact" },
+                    new HeaderCell { Content = "последний", ColumnId = "lastsuccess" },
+                    new HeaderCell { Content = "кол-во", ColumnId = "succsesscount" },
+                    new HeaderCell { Content = "последний", ColumnId = "lasterror" },
+                    new HeaderCell { Content = "кол-во", ColumnId = "errorscount" }
+
+                });
+
+                var dataRows = new List<List<DataCell>>();
+                table.DataRows = dataRows;
+
+                //foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MaxValue))
+                foreach (var statItem in statList)
+                {
+                    var dataRow = new List<DataCell>
+                    {
+                        new DataCell
+                        {
+                            Content = statItem.DBId,
+                            ColumnId = "dbid"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.UserName,
+                            ColumnId = "username"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.IsScheduled ? "да" : "нет",
+                            ColumnId = "plan"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.TimeBeforePlanLaunch == null ? string.Empty : statItem.TimeBeforePlanLaunch.Value.ToStringFormat(false),
+                            ColumnId = "timebeforeplan"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.OneTimePerHoursPlan == null ? string.Empty : statItem.OneTimePerHoursPlan.Value.ToString(),
+                            ColumnId = "oneinhoursplan"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.OneTimePerHoursFact == null ? string.Empty : statItem.OneTimePerHoursFact.Value.ToStringFormat(1),
+                            ColumnId = "oneinhoursfact"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.LastSuccessLaunchFactTime == null ? string.Empty : statItem.LastSuccessLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+                            ColumnId = "lastsuccess"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.SuccessLaunchesCount.ToString(),
+                            ColumnId = "succsesscount"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.LastErrorLaunchFactTime == null ? string.Empty : statItem.LastErrorLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+                            ColumnId = "lasterror"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.ErrorLaunchesCount.ToString(),
+                            ColumnId = "errorscount"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.AvgSuccessLaunchDurationInMinutes == null ? string.Empty : statItem.AvgSuccessLaunchDurationInMinutes.Value.ToStringFormat(1),
+                            ColumnId = "avgtime"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.AvgSuccessLaunchAllObjectsFactCount == null ? string.Empty : statItem.AvgSuccessLaunchAllObjectsFactCount.Value.ToStringFormat(0),
+                            ColumnId = "avgsize"
+                        }
+                    };
+                    dataRows.Add(dataRow);
+                }
+
+                string result = table.ToString();
+                return result;
+            }
+            return "Нет заданий и статистики";
+        }
+
         public string GetStatFullInfo(List<SchemaWorkAggrFullStat> statList, int lastDaysToAnalyz)
         {
             if (statList.Any())
@@ -410,7 +569,7 @@ namespace OracleStructExporter.Core
                     new Column { Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left },
                     new Column { Id = "username", MaxWidth = 30, Alignment = Alignment.Left },
                     new Column { Id = "plan", MaxWidth = 7, Alignment = Alignment.Center },
-                    new Column { Id = "timebeforeplan", MaxWidth = 22, Alignment = Alignment.Right },
+                    new Column { Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right },
                     new Column { Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right },
                     new Column { Id = "oneinhoursfact7", MaxWidth = 10, Alignment = Alignment.Right },
                     new Column { Id = "oneinhoursfact30", MaxWidth = 10, Alignment = Alignment.Right },
@@ -470,10 +629,10 @@ namespace OracleStructExporter.Core
                     new HeaderCell { Content = "Раз в X часов", ColumnId = "oneinhoursplan", ColSpan = 5},
                     new HeaderCell { Content = "Успешные запуски", ColumnId = "lastsuccess", ColSpan = 5 },
                     new HeaderCell { Content = "Неуспешные запуски", ColumnId = "lasterror", ColSpan = 5 },
-                    new HeaderCell { Content = "Среднее время обработки схемы", ColumnId = "lastduration", ColSpan = 5 },
+                    new HeaderCell { Content = "Среднее время обработки схемы (мин)", ColumnId = "lastduration", ColSpan = 5 },
                     new HeaderCell { Content = "Доля времени работы от времени работы приложения", ColumnId = "fromapptime7", ColSpan = 4 },
                     new HeaderCell { Content = "Доля времени работы от всего времени", ColumnId = "fromalltime7", ColSpan = 4 },
-                    new HeaderCell { Content = "Среднее количество изменений", ColumnId = "lastcommitcount", ColSpan = 5 },
+                    new HeaderCell { Content = "Суммарное количество изменений", ColumnId = "lastcommitcount", ColSpan = 5 },
                     new HeaderCell { Content = "Среднее общее количество", ColumnId = "lastallcount", ColSpan = 5 }
                 });
 
@@ -532,7 +691,8 @@ namespace OracleStructExporter.Core
                 var dataRows = new List<List<DataCell>>();
                 table.DataRows = dataRows;
 
-                foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MaxValue))
+                //foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MaxValue))
+                foreach (var statItem in statList)
                 {
                     var dataRow = new List<DataCell>
                     {
@@ -633,7 +793,7 @@ namespace OracleStructExporter.Core
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = statItem.LastSuccessLaunchDuration == null ? string.Empty : statItem.LastSuccessLaunchDuration.Value.TotalMinutes.ToStringFormat(1),
                             ColumnId = "lastduration"
                         },
                         new DataCell
@@ -658,67 +818,67 @@ namespace OracleStructExporter.Core
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAppTime7 == null ? "0" : statItem.FromAppTime7.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromapptime7"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAppTime30 == null ? "0" : statItem.FromAppTime30.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromapptime30"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAppTime90 == null ? "0" : statItem.FromAppTime90.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromapptime90"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAppTime == null ? "0" : statItem.FromAppTime.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromapptime"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAllTime7 == null ? "0" : statItem.FromAllTime7.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromalltime7"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAllTime30 == null ? "0" : statItem.FromAllTime30.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromalltime30"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAllTime90 == null ? "0" : statItem.FromAllTime90.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromalltime90"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = (statItem.FromAllTime == null ? "0" : statItem.FromAllTime.Value.ToStringFormat(0)) + "%",
                             ColumnId = "fromalltime"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = statItem.LastSuccessLaunchCommitObjectsFactCount == null ? string.Empty : statItem.LastSuccessLaunchCommitObjectsFactCount.Value.ToString(),
                             ColumnId = "lastcommitcount"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = statItem.SumSuccessLaunchCommitObjectsFactCount7 == null ? string.Empty : statItem.SumSuccessLaunchCommitObjectsFactCount7.Value.ToString(),
                             ColumnId = "avgcommitcount7"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = statItem.SumSuccessLaunchCommitObjectsFactCount30 == null ? string.Empty : statItem.SumSuccessLaunchCommitObjectsFactCount30.Value.ToString(),
                             ColumnId = "avgcommitcount30"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = statItem.SumSuccessLaunchCommitObjectsFactCount90 == null ? string.Empty : statItem.SumSuccessLaunchCommitObjectsFactCount90.Value.ToString(),
                             ColumnId = "avgcommitcount90"
                         },
                         new DataCell
                         {
-                            Content = "-",
+                            Content = statItem.SumSuccessLaunchCommitObjectsFactCount == null ? string.Empty : statItem.SumSuccessLaunchCommitObjectsFactCount.Value.ToString(),
                             ColumnId = "avgcommitcount"
                         },
                         new DataCell
@@ -754,6 +914,76 @@ namespace OracleStructExporter.Core
                 return result;
             }
             return "Нет заданий и статистики";
+        }
+
+        public string GetCommitInfo(List<RepoChangeItem> repoItems)
+        {
+            if (repoItems!=null && repoItems.Any())
+            {
+                bool isInitial = repoItems.Any(c => c.IsInitial);
+                var table = new TableBuilder.TableBuilder();
+                var columns = new List<Column>();
+                table.Columns = columns;
+
+                columns.AddRange(new[]
+                {
+                    new Column { Id = "objecttype", MinWidth = 16, Alignment = Alignment.Left },
+                    new Column { Id = "filename", MinWidth = 50, Alignment = Alignment.Left },
+                    new Column { Id = "filesize", MinWidth = 16, Alignment = Alignment.Right },
+                    new Column { Id = "operation", MinWidth = 6, Alignment = Alignment.Center },
+                });
+
+                var headerRows = new List<List<HeaderCell>>();
+                table.HeaderRows = headerRows;
+
+                headerRows.Add(new List<HeaderCell>
+                {
+                    new HeaderCell { Content = "Тип", ColumnId = "objecttype" },
+                    new HeaderCell { Content = "Файл", ColumnId = "filename" },
+                    new HeaderCell { Content = "Размер (байт)", ColumnId = "filesize" },
+                    new HeaderCell { Content = "Опер", ColumnId = "operation" },
+
+                });
+
+                var dataRows = new List<List<DataCell>>();
+                table.DataRows = dataRows;
+
+                foreach (var item in repoItems.OrderBy(c => c.ObjectType).ThenBy(c=>c.FileName))
+                {
+                    var dataRow = new List<DataCell>
+                    {
+                        new DataCell
+                        {
+                            Content = item.ObjectType.ToString(),
+                            ColumnId = "objecttype"
+                        },
+                        new DataCell
+                        {
+                            Content = item.FileName,
+                            ColumnId = "filename"
+                        },
+                        new DataCell
+                        {
+                            Content = item.FileSize.ToString(),
+                            ColumnId = "filesize"
+                        },
+                        new DataCell
+                        {
+                            Content = item.Operation.ToString(),
+                            ColumnId = "operation"
+                        }
+                    };
+                    dataRows.Add(dataRow);
+                }
+
+                string result = "";
+                if (isInitial)
+                    result += "Первичная выгрузка. ";
+                result += $"Добавлено/изменено: {repoItems.Count}{Environment.NewLine}";
+                result += table.ToString();
+                return result;
+            }
+            return "Без изменений";
         }
     }
 }

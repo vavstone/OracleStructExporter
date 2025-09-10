@@ -69,7 +69,7 @@ namespace OracleStructExporter.Core
                     List<TimeSpan> durations = new List<TimeSpan>();
                     foreach (var endItem in successEnded)
                     {
-                        var startItem = plainStat.FirstOrDefault(c => c.ProcessId == endItem.ProcessId && c.Level == ExportProgressDataLevel.STAGESTARTINFO);
+                        var startItem = plainStat.FirstOrDefault(c => c.DBId == endItem.DBId && c.UserName == endItem.UserName && c.ProcessId == endItem.ProcessId && c.Level == ExportProgressDataLevel.STAGESTARTINFO);
                         if (startItem!=null)
                             durations.Add(endItem.EventTime-startItem.EventTime);
                     }
@@ -96,11 +96,7 @@ namespace OracleStructExporter.Core
                     }
                 }
 
-               
-
             }
-
-
             return res;
         }
     }

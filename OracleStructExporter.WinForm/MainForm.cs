@@ -204,7 +204,7 @@ namespace OracleStructExporter.WinForm
             exporter = new Exporter();
             exporter.ProgressChanged += ProgressChanged;
             exporter.SetSettings(settings);
-            exporter.StartWork(threads, true);
+            exporter.StartWork(threads, true, false);
 
         }
 

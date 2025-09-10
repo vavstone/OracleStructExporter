@@ -56,8 +56,13 @@
     <Compile Include="ExportProgressDataStage.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="ProgressDataManager.cs" />
+    <Compile Include="RepoChangeCommitGroupInfo.cs" />
+    <Compile Include="RepoChangeDbSchemaGroupInfo.cs" />
     <Compile Include="RepoChangeItem.cs" />
+    <Compile Include="RepoChangeObjAndOperGroupInfo.cs" />
     <Compile Include="SchemaWorkAggrFullStat.cs" />
+    <Compile Include="AppWorkStat.cs" />
+    <Compile Include="CommitStat.cs" />
     <Compile Include="SchemaWorkStat.cs" />
     <Compile Include="SchemaWorkAggrStat.cs" />
     <Compile Include="SettingsHelper.cs" />

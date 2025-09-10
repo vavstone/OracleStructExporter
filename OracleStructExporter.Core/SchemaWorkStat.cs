@@ -11,7 +11,7 @@ namespace OracleStructExporter.Core
         public ExportProgressDataStage Stage { get; set; }
         public ExportProgressDataLevel Level { get; set; }
         public int? ErrorsCount { get; set; }
-        public int? SchemaObjCountPlan { get; set; }
+        //public int? SchemaObjCountPlan { get; set; }
         public int? SchemaObjCountFact { get; set; }
     }
 }
