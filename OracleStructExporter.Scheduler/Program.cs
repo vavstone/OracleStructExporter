@@ -3,20 +3,17 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime;
 using System.Threading;
 
 namespace OracleStructExporter.Scheduler
 {
     class Program
     {
-        //private static OSESettings _settings;
-        //private static string _logPrefix;
-        //private static int _processId;
 
         static OSESettings settings;
         static Exporter exporter;
         static Logger logger;
+        static int waitIntervalBeforeExitInSeconds;
         
 
 
@@ -28,7 +25,7 @@ namespace OracleStructExporter.Scheduler
 
         static void WaitBeforeExit()
         {
-            Thread.Sleep(5000);
+            Thread.Sleep(waitIntervalBeforeExitInSeconds*1000);
             //Console.ReadLine();
         }
 
@@ -44,6 +41,18 @@ namespace OracleStructExporter.Scheduler
                 exporter.SetSettings(settings);
                 logger = new Logger(settings.LogSettings);
 
+                //Статистика
+                var prefixForGettingStat = settings.LogSettings.DBLog.DBLogPrefix;
+                //TODO брать из настроек
+                var getStatForLastDays = 365;
+                var minSuccessResultsForStat = 1;
+                var testMode = false;
+                waitIntervalBeforeExitInSeconds = 5;
+
+                //для отладки!!!!!!!!
+                //prefixForGettingStat = "OSECA";
+                //testMode = true;
+
                 // Проверка на уже запущенные экземпляры
                 if (IsAlreadyRunning())
                 {
@@ -52,18 +61,12 @@ namespace OracleStructExporter.Scheduler
                     return;
                 }
 
-                //TODO брать из настроек
-                var getStatForLastDays = 365;
-                var testMode = false;
 
-                //Статистика
-                var prefix = settings.LogSettings.DBLog.DBLogPrefix;
                 
-                //для отладки
-                //prefix = "OSECA";
 
                 //var statList = exporter.GetAggrStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
-                var statFullList = exporter.GetAggrFullStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefix);
+                var statFullList = exporter.GetAggrFullStat(settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess, getStatForLastDays, prefixForGettingStat);
+                
 
                 //var statInfoShort = logger.GetStatInfo(statList, getStatForLastDays);
                 var statInfoShort = logger.GetStatInfoV2(statFullList, getStatForLastDays);
@@ -80,26 +83,29 @@ namespace OracleStructExporter.Scheduler
 
                 // Выбор заданий для обработки
                 //var connectionsToProcess = SelectConnectionsToProcess(statList);
-                var connectionsToProcess = Exporter.SelectConnectionsToProcess(statFullList, settings.SchedulerSettings.ConnectionsToProcess);
+                var connectionsToProcess = Exporter.SelectConnectionsToProcess(statFullList, settings.SchedulerSettings.ConnectionsToProcess.MaxConnectPerOneProcess, minSuccessResultsForStat);
                 if (!connectionsToProcess.Any())
                 {
-                    exporter.ReportMainProcessMessage("Нет заданий для обработки");
+                    exporter.ReportMainProcessMessage($"Нет заданий для обработки. {Environment.NewLine}");
                 }
                 else
                 {
+                    
                     var threads = new List<ThreadInfo>();
                     // Определение подключений для обработки
                     foreach (var item in connectionsToProcess)
                     {
-                        var dbIdC = item.DbId;
-                        var userName = item.UserName;
-                        var conn = settings.Connections.FirstOrDefault(c => c.DBIdC == dbIdC && c.UserName == userName);
+                        var dbIdC = item.DbId.ToUpper();
+                        var userName = item.UserName.ToUpper();
+                        var conn = settings.Connections.FirstOrDefault(c => c.DBIdC.ToUpper() == dbIdC && c.UserName.ToUpper() == userName);
                         ThreadInfo threadInfo = new ThreadInfo();
                         threadInfo.Connection = conn;
                         threadInfo.ExportSettings = settings.ExportSettings;
                         threads.Add(threadInfo);
                     }
-                    exporter.StartWork(threads, false, testMode);
+
+                    var schemasToWorkInfo = logger.GetToWorkInfo(connectionsToProcess, true);
+                    exporter.StartWork(threads, schemasToWorkInfo, false, testMode);
                 }
 
                 WaitBeforeExit();

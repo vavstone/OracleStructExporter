@@ -176,6 +176,7 @@ namespace OracleStructExporter.WinForm
                 threads.Add(threadInfo);
             }
 
+            var connectionsToProcess = new List<PrognozBySchema>();
             foreach (var threadInfo in threads)
             {
                 var conn = threadInfo.Connection;
@@ -196,6 +197,7 @@ namespace OracleStructExporter.WinForm
                 }
                 threadLogInfoControl.SetProgressStatus("Выгружено: 0, осталось выгрузить: 0");
                 threadLogInfoControl.StartProgressBar();
+                connectionsToProcess.Add(new PrognozBySchema{ DbId = threadInfo.Connection.DbId, UserName = threadInfo.Connection.UserName});
             }
 
             btnExport.Enabled = false;
@@ -204,7 +206,12 @@ namespace OracleStructExporter.WinForm
             exporter = new Exporter();
             exporter.ProgressChanged += ProgressChanged;
             exporter.SetSettings(settings);
-            exporter.StartWork(threads, true, false);
+
+
+            var schemasToWorkInfo = logger.GetToWorkInfo(connectionsToProcess, false);
+
+
+            exporter.StartWork(threads, schemasToWorkInfo, true, false);
 
         }
 

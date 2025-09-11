@@ -275,7 +275,7 @@ namespace OracleStructExporter.Core
             _mainDbWorker = new DbWorker(connectionString, _mainProgressManager, null);
         }
 
-        public async void StartWork(List<ThreadInfo> threadInfoList, bool isAsyncMode, bool testMode)
+        public async void StartWork(List<ThreadInfo> threadInfoList, string connToProcessInfo, bool isAsyncMode, bool testMode)
         {
             // Если задача уже выполняется
             if (_cancellationTokenSource != null)
@@ -297,10 +297,11 @@ namespace OracleStructExporter.Core
             //{
             //    connection.Open();
 
-            var schemasToWork = threadInfoList.Select(c => c.Connection.UserNameAndDBIdC).ToList()
-                .MergeFormatted("", ",");
+            //var schemasToWork = threadInfoList.Select(c => c.Connection.UserNameAndDBIdC).ToList()
+            //    .MergeFormatted("", ",");
 
-            StartProcess(_startDateTime, schemasToWork/*, ct*/);
+
+            StartProcess(_startDateTime, connToProcessInfo/*, ct*/);
                     //_mainDbWorker.SaveNewProcessInDBLog(_startDateTime, threadInfoList.Count,
                     //    _settings.LogSettings.DBLog.DBLogPrefix, out _processId);
                 //}
@@ -1045,19 +1046,143 @@ namespace OracleStructExporter.Core
             return SchemaWorkAggrFullStat.GetAggrFullStat(plainStat, appWorkStat, commitStat, scheduledConnections, getStatForLastDays);
         }
 
-        public static List<ConnectionToProcess> SelectConnectionsToProcess(List<SchemaWorkAggrFullStat> statInfo, ConnectionsToProcess connectionsToProcess)
+        //public static List<ConnectionToProcess> SelectConnectionsToProcess(List<SchemaWorkAggrFullStat> statInfo, int maxConnectPerOneProcess)
+        //{
+        //    var maxConPerProcess = maxConnectPerOneProcess;
+        //    var res = new List<ConnectionToProcess>();
+        //    foreach (var stat in statInfo.Where(c=>c.IsScheduled).Take(maxConPerProcess))
+        //    {
+        //        res.Add(new ConnectionToProcess
+        //        {
+        //            DbId = stat.DBId,
+        //            UserName = stat.UserName,
+        //            Enabled = true,
+        //            OneSuccessResultPerHours = stat.OneTimePerHoursPlan??0
+        //        });
+        //    }
+        //    return res;
+        //}
+
+        static PrognozBySchema getStatForSchema(List<SchemaWorkAggrFullStat> statInfo, string dbid, string userName,
+            int minSuccessResultsForPrognoz, int? intervalForSearch)
         {
-            var maxConPerProcess = connectionsToProcess.MaxConnectPerOneProcess;
-            var res = new List<ConnectionToProcess>();
-            foreach (var stat in statInfo.Where(c=>c.IsScheduled).Take(maxConPerProcess))
+            var schemaStat = statInfo.Where(c =>
+                (userName is null || c.UserName.ToUpper() == userName.ToUpper()) &&
+                (dbid is null || c.DBId.ToUpper() == dbid.ToUpper()) &&
+                ((intervalForSearch is null && c.SuccessLaunchesCount >= minSuccessResultsForPrognoz) ||
+                 (intervalForSearch == SchemaWorkAggrFullStat.Interval7 && c.SuccessLaunchesCount7 >= minSuccessResultsForPrognoz) ||
+                 (intervalForSearch == SchemaWorkAggrFullStat.Interval30 && c.SuccessLaunchesCount30 >= minSuccessResultsForPrognoz) ||
+                 (intervalForSearch == SchemaWorkAggrFullStat.Interval90 && c.SuccessLaunchesCount90 >= minSuccessResultsForPrognoz))).ToList();
+            if (schemaStat.Any())
             {
-                res.Add(new ConnectionToProcess
+                var res = new PrognozBySchema();
+                if (intervalForSearch == SchemaWorkAggrFullStat.Interval7)
                 {
-                    DbId = stat.DBId,
-                    UserName = stat.UserName,
-                    Enabled = true,
-                    OneSuccessResultPerHours = stat.OneTimePerHoursPlan??0
-                });
+                    res.OjectsCount = schemaStat.Average(c => c.AvgSuccessLaunchAllObjectsFactCount7 ?? 0);
+                    res.DurationsInMinutes = schemaStat.Average(c => c.AvgSuccessLaunchDurationInMinutes7 ?? 0);
+                }
+                else if (intervalForSearch == SchemaWorkAggrFullStat.Interval30)
+                {
+                    res.OjectsCount = schemaStat.Average(c => c.AvgSuccessLaunchAllObjectsFactCount30 ?? 0);
+                    res.DurationsInMinutes = schemaStat.Average(c => c.AvgSuccessLaunchDurationInMinutes30 ?? 0);
+                }
+                else if (intervalForSearch == SchemaWorkAggrFullStat.Interval90)
+                {
+                    res.OjectsCount = schemaStat.Average(c => c.AvgSuccessLaunchAllObjectsFactCount90 ?? 0);
+                    res.DurationsInMinutes = schemaStat.Average(c => c.AvgSuccessLaunchDurationInMinutes90 ?? 0);
+                }
+                else
+                {
+                    res.OjectsCount = schemaStat.Average(c => c.AvgSuccessLaunchAllObjectsFactCount ?? 0);
+                    res.DurationsInMinutes = schemaStat.Average(c => c.AvgSuccessLaunchDurationInMinutes ?? 0);
+                }
+
+                return res;
+            }
+            return null;
+        }
+
+        public static List<PrognozBySchema> SelectConnectionsToProcess(List<SchemaWorkAggrFullStat> statInfo, int maxConnectPerOneProcess, int minSuccessResultsForPrognoz)
+        {
+            var res = new List<PrognozBySchema>();
+
+            
+            var connToProcess = new List<SchemaWorkAggrFullStat>();
+            foreach (var stat in statInfo)
+            {
+                var connToDo = true;
+                if (!stat.IsScheduled)
+                {
+                    connToDo = false;
+                }
+                else if (stat.OneTimePerHoursPlan!=null && stat.OneTimePerHoursPlan > 0)
+                {
+                    if (stat.LastSuccessLaunchFactTime != null)
+                    {
+                        var durationFromLastSuccess = DateTime.Now - stat.LastSuccessLaunchFactTime.Value;
+                        if (TimeSpan.FromHours(stat.OneTimePerHoursPlan.Value) > durationFromLastSuccess)
+                            connToDo = false;
+                    }
+                }
+                if (connToDo)
+                    connToProcess.Add(stat);
+            }
+
+            foreach (var statItem in connToProcess.Take(maxConnectPerOneProcess))
+            {
+                PrognozBySchema newItem;
+
+                //пытаемся найти подходящую статистику за 7, 30, 90 или максимальный доступный интервал
+                //сначала для схемы, затем для БД, затем любую
+                newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                    minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval7);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval30);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval90);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                        minSuccessResultsForPrognoz, null);
+
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval7);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval30);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval90);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                        minSuccessResultsForPrognoz, null);
+
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, null, null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval7);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, null, null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval30);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, null, null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStat.Interval90);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, null, null,
+                        minSuccessResultsForPrognoz, null);
+
+                //если что-то нашли в статистике
+                if (newItem!=null)
+                {
+                    newItem.DbId = statItem.DBId.ToUpper();
+                    newItem.UserName = statItem.UserName.ToUpper();
+                    res.Add(newItem);
+                }
+                else
+                {
+                    res.Add(new PrognozBySchema {DbId = statItem.DBId.ToUpper(), UserName = statItem.UserName.ToUpper()});
+                }
             }
             return res;
         }

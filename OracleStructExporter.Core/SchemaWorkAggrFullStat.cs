@@ -6,9 +6,9 @@ namespace OracleStructExporter.Core
 {
     public class SchemaWorkAggrFullStat
     {
-        private static int Interval7 = 7;
-        private static int Interval30 = 30;
-        private static int Interval90 = 90;
+        public static int Interval7 = 7;
+        public static int Interval30 = 30;
+        public static int Interval90 = 90;
 
         //Общие, не привязанные к разбивке по интервалам значения
         public string DBId { get; set; }

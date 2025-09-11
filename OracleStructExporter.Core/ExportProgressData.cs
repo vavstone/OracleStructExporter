@@ -150,23 +150,23 @@ namespace OracleStructExporter.Core
                 if (Stage == ExportProgressDataStage.PROCESS_MAIN)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Запуск работы по {GetTextAddInfo("SCHEMAS_TO_WORK")}...";
+                        return $"Запуск работы по:{Environment.NewLine}{GetTextAddInfo("SCHEMAS_TO_WORK")}";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
-                        errorsAddStr = $". Ошибок: {ErrorsCount}";
+                        errorsAddStr = $"{Environment.NewLine}Ошибок: {ErrorsCount}";
                     var schemasAddStr = "";
                     var schemasSuccess = GetTextAddInfo("SCHEMAS_SUCCESS");
                     var schemasError = GetTextAddInfo("SCHEMAS_ERROR");
                     if (!string.IsNullOrEmpty(schemasSuccess))
-                        schemasAddStr += $" Успешно: {schemasSuccess}.";
+                        schemasAddStr += $"{Environment.NewLine}Успешно: {schemasSuccess}.";
                     if (!string.IsNullOrEmpty(schemasError))
                     {
                         //if (!string.IsNullOrWhiteSpace(schemasAddStr))
                         //    schemasAddStr += " ";
-                        schemasAddStr += $" Ошибки: {schemasError}.";
+                        schemasAddStr += $"{Environment.NewLine}Ошибки: {schemasError}.";
                     }
 
-                    return $"Завершение работы.{schemasAddStr} Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены.{errorsAddStr}{DurationString}";
+                    return $"Завершение работы.{schemasAddStr}{Environment.NewLine}Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{DurationString}.{errorsAddStr}";
                 }
 
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)

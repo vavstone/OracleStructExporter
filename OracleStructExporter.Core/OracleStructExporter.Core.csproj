@@ -79,6 +79,7 @@
     <Compile Include="ObjectTypeNames.cs" />
     <Compile Include="OracleLikeStringComparer.cs" />
     <Compile Include="DBStructs\PartOrSubPartKeyColumns.cs" />
+    <Compile Include="PrognozBySchema.cs" />
     <Compile Include="Settings\GitLabRepo.cs" />
     <Compile Include="Settings\SimpleFileRepo.cs" />
     <Compile Include="Settings\DuplicatesClearSettings.cs" />
