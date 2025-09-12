@@ -178,5 +178,23 @@ namespace OracleStructExporter.Core
             string formatString = "0." + new string('#', decimalPlaces);
             return rounded.ToString(formatString, CultureInfo.InvariantCulture);
         }
+
+
+        public static TimeSpan DivideBy(this TimeSpan timeSpan, double divisor)
+        {
+            if (double.IsNaN(divisor) || double.IsInfinity(divisor))
+                throw new ArgumentException("Divisor must be a finite number.", nameof(divisor));
+
+            if (divisor == 0)
+                throw new DivideByZeroException("Divisor cannot be zero.");
+
+            double ticks = timeSpan.Ticks / divisor;
+
+            if (ticks > long.MaxValue || ticks < long.MinValue)
+                throw new OverflowException("Resulting duration is too long or too short for a TimeSpan.");
+
+            return TimeSpan.FromTicks((long) Math.Round(ticks));
+        }
+
     }
 }

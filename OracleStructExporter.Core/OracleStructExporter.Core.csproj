@@ -81,14 +81,13 @@
     <Compile Include="DBStructs\PartOrSubPartKeyColumns.cs" />
     <Compile Include="PrognozBySchema.cs" />
     <Compile Include="Settings\GitLabRepo.cs" />
+    <Compile Include="Settings\WinAppSettings.cs" />
     <Compile Include="Settings\SimpleFileRepo.cs" />
-    <Compile Include="Settings\DuplicatesClearSettings.cs" />
     <Compile Include="Settings\LogType.cs" />
     <Compile Include="Settings\BaseRepo.cs" />
     <Compile Include="Settings\RepoSettings.cs" />
     <Compile Include="Settings\Log.cs" />
     <Compile Include="Settings\TextFilesLog.cs" />
-    <Compile Include="Settings\LogSettings.cs" />
     <Compile Include="Settings\ExportSettingsDetails.cs" />
     <Compile Include="Settings\ExportSettings.cs" />
     <Compile Include="Settings\MaskForFileNames.cs" />

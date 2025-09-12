@@ -20,7 +20,7 @@ namespace OracleStructExporter.Scheduler
         static void LoadSettingsFromFile()
         {
             settings = SettingsHelper.LoadSettings();
-            settings.RepairSettingsValues();
+            //settings.RepairSettingsValues();
         }
 
         static void WaitBeforeExit()
@@ -39,10 +39,11 @@ namespace OracleStructExporter.Scheduler
                 exporter = new Exporter();
                 exporter.ProgressChanged += ProgressChanged;
                 exporter.SetSettings(settings);
-                logger = new Logger(settings.LogSettings);
+                exporter.SetSchedulerProps();
+                logger = new Logger(settings.TextFilesLog, settings.SchedulerSettings.DBLog);
 
                 //Статистика
-                var prefixForGettingStat = settings.LogSettings.DBLog.DBLogPrefix;
+                var prefixForGettingStat = settings.SchedulerSettings.DBLog.DBLogPrefix; //settings.LogSettings.DBLog.DBLogPrefix;
                 //TODO брать из настроек
                 var getStatForLastDays = 365;
                 var minSuccessResultsForStat = 1;
@@ -50,8 +51,8 @@ namespace OracleStructExporter.Scheduler
                 waitIntervalBeforeExitInSeconds = 5;
 
                 //для отладки!!!!!!!!
-                //prefixForGettingStat = "OSECA";
-                //testMode = true;
+                prefixForGettingStat = "OSECA";
+                testMode = true;
 
                 // Проверка на уже запущенные экземпляры
                 if (IsAlreadyRunning())
@@ -167,12 +168,14 @@ namespace OracleStructExporter.Scheduler
             {
                 //сообщения от потоков
                 logger.InsertThreadsTextFileLog(progressData, true, out string message);
-                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString, settings.LogSettings.DBLog);
+                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString,
+                    settings.SchedulerSettings.DBLog);//settings.LogSettings.DBLog);
                 if (progressData.IsEndOfSimpleRepoCreating)
                 {
                     logger.InsertRepoTextFileLog(progressData, true);
                     logger.InsertRepoDBLog(progressData, true, exporter.LogDBConnectionString,
-                        settings.LogSettings.DBLog);
+                        //settings.LogSettings.DBLog);
+                        settings.SchedulerSettings.DBLog);
                 }
 
                 

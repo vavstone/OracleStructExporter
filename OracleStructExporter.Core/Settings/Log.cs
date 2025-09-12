@@ -6,8 +6,7 @@ namespace OracleStructExporter.Core
 {
     public class Log
     {
-        [XmlAttribute]
-        public bool Enabled { get; set; }
+        
         [XmlElement]
         public string ExcludeStageInfo { get; set; }
         [XmlIgnore]

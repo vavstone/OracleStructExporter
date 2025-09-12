@@ -88,9 +88,14 @@ namespace OracleStructExporter.Core
         }
 
 
-        public ProgressDataManager(IProgress<ExportProgressData> progressReporter, string processId, Connection currentConnection)
+        public ProgressDataManager(IProgress<ExportProgressData> progressReporter)
         {
             _progressReporter = progressReporter;
+            
+        }
+
+        public void SetSchedulerProps(string processId, Connection currentConnection)
+        {
             _processId = processId;
             Connection = currentConnection;
         }

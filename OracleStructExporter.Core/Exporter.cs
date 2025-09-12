@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Data.OracleClient;
 using System.IO;
 using System.Linq;
-using System.Runtime;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,19 +66,21 @@ namespace OracleStructExporter.Core
             });
         }
 
-        static void SaveObjectToFile(ThreadInfo thread, string objectName,
+        void SaveObjectToFile(ThreadInfo thread, string objectName,
             string objectTypeSubdirName, string ddl, string fileExtension)
         {
             string fileName = $"{objectName}{fileExtension}".ToLower();
             string targetFolder;
-            if (thread.ExportSettings.WriteOnlyToMainDataFolder)
+            //if (thread.ExportSettings.WriteOnlyToMainDataFolder)
+            if (_settings.IsWinApp)
             {
-                targetFolder = thread.ExportSettings.PathToExportDataMain;
-                if (thread.ExportSettings.UseProcessesSubFoldersInMain)
-                    targetFolder = Path.Combine(targetFolder, thread.ProcessSubFolder);
+                targetFolder = _settings.ExportSettings.PathToExportDataMain;
+                //if (thread.ExportSettings.UseProcessesSubFoldersInMain)
+                //    targetFolder = Path.Combine(targetFolder, thread.ProcessSubFolder);
             }
             else
-                targetFolder = thread.ExportSettings.PathToExportDataTemp;
+                //targetFolder = thread.ExportSettings.PathToExportDataTemp;
+                targetFolder = _settings.SchedulerSettings.PathToExportDataTemp;
             string objectTypePath = Path.Combine(targetFolder, thread.DBSubfolder, thread.UserNameSubfolder, objectTypeSubdirName.ToLower());
             string fullPath = Path.Combine(objectTypePath, fileName);
             if (!Directory.Exists(objectTypePath))
@@ -104,8 +105,10 @@ namespace OracleStructExporter.Core
 
             try
             {
-                var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, /*thread.ProcessSubFolder,*/ thread.DBSubfolder, thread.UserNameSubfolder); 
-                var destFolder = Path.Combine(thread.ExportSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, thread.UserNameSubfolder);
+                //var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder); 
+                //var destFolder = Path.Combine(thread.ExportSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, thread.UserNameSubfolder);
+                var sourceFolder = Path.Combine(_settings.SchedulerSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder);
+                var destFolder = Path.Combine(_settings.SchedulerSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, thread.UserNameSubfolder);
                 FilesManager.DeleteDirectory(destFolder);
                 filesCount = FilesManager.MoveDirectory(sourceFolder, destFolder);
             }
@@ -126,7 +129,7 @@ namespace OracleStructExporter.Core
 
         }
 
-        static void MoveFilesToMainFolder(ThreadInfo thread, ProgressDataManager progressManager)
+        void MoveFilesToMainFolder(ThreadInfo thread, ProgressDataManager progressManager)
         {
             var progressData = new ExportProgressData(
                 ExportProgressDataLevel.STAGESTARTINFO,
@@ -136,12 +139,13 @@ namespace OracleStructExporter.Core
 
             try
             {
-                var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, /*thread.ProcessSubFolder,*/ thread.DBSubfolder, thread.UserNameSubfolder);
+                //var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder);
+                var sourceFolder = Path.Combine(_settings.SchedulerSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder);
                 var destFolder = thread.ExportSettings.PathToExportDataMain;
-                if (thread.ExportSettings.UseProcessesSubFoldersInMain)
-                    destFolder = Path.Combine(destFolder, thread.ProcessSubFolder);
+                //if (thread.ExportSettings.UseProcessesSubFoldersInMain)
+                //    destFolder = Path.Combine(destFolder, thread.ProcessSubFolder);
                 destFolder = Path.Combine(destFolder, thread.DBSubfolder, thread.UserNameSubfolder);
-                if (thread.ExportSettings.ClearMainFolderBeforeWriting)
+                //if (thread.ExportSettings.ClearMainFolderBeforeWriting)
                     FilesManager.DeleteDirectory(destFolder);
                 filesCount = FilesManager.MoveDirectory(sourceFolder, destFolder);
             }
@@ -172,7 +176,7 @@ namespace OracleStructExporter.Core
         //    var targetFolder = Path.Combine(thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo)
         //}
 
-        static void CreateSimpleRepoCommit(ThreadInfo thread, ProgressDataManager progressManager)
+        void CreateSimpleRepoCommit(ThreadInfo thread, ProgressDataManager progressManager)
         {
             var progressData = new ExportProgressData(
                 ExportProgressDataLevel.STAGESTARTINFO,
@@ -182,10 +186,10 @@ namespace OracleStructExporter.Core
             List<RepoChangeItem> repoChanges = new List<RepoChangeItem>();
             try
             {
-                var sourceFolder = thread.ExportSettings.PathToExportDataMain;
-                if (thread.ExportSettings.UseProcessesSubFoldersInMain)
-                    sourceFolder = Path.Combine(sourceFolder, thread.ProcessSubFolder);
-                var targetFolder = thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo;
+                var sourceFolder = _settings.ExportSettings.PathToExportDataMain;
+                //if (thread.ExportSettings.UseProcessesSubFoldersInMain)
+                //    sourceFolder = Path.Combine(sourceFolder, thread.ProcessSubFolder);
+                var targetFolder = _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo; //thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo;
                 var vcsManager = new VcsManager();
                 //var currentRepoName = $"{thread.DBSubfolder}\\{thread.UserNameSubfolder}";
                 vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, out changesCount, out repoChanges);
@@ -264,14 +268,19 @@ namespace OracleStructExporter.Core
         public void SetSettings(OSESettings settings)
         {
             _settings = settings;
+            _mainProgressManager = new ProgressDataManager(_progressReporter);
+        }
+
+        public void SetSchedulerProps()
+        {
             var dbLogConn = _settings.Connections.First(c =>
-                c.DBIdC.ToUpper() == _settings.LogSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
-                _settings.LogSettings.DBLog.DBLogUserName.ToUpper());
+                c.DBIdC.ToUpper() == _settings.SchedulerSettings.DBLog.DBLogDBId.ToUpper() && c.UserName.ToUpper() ==
+                _settings.SchedulerSettings.DBLog.DBLogUserName.ToUpper());
             var connectionString = $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)" +
                                    $"(HOST={dbLogConn.Host})(PORT={dbLogConn.Port}))" +
                                    $"(CONNECT_DATA=(SID={dbLogConn.SID})));" +
                                    $"User Id={dbLogConn.UserName};Password={dbLogConn.PasswordC};";
-            _mainProgressManager = new ProgressDataManager(_progressReporter, null, dbLogConn);
+            _mainProgressManager.SetSchedulerProps(null, dbLogConn);
             _mainDbWorker = new DbWorker(connectionString, _mainProgressManager, null);
         }
 
@@ -291,7 +300,8 @@ namespace OracleStructExporter.Core
                 _cancellationTokenSource = new CancellationTokenSource();
                 var ct = _cancellationTokenSource.Token;
 
-                _mainDbWorker.SetCancellationToken(ct);
+                if (_mainDbWorker!=null)
+                    _mainDbWorker.SetCancellationToken(ct);
 
             //using (OracleConnection connection = new OracleConnection(connectionString))
             //{
@@ -482,15 +492,16 @@ namespace OracleStructExporter.Core
                         var typesText = new Dictionary<string, string>();
                         var viewsText = new Dictionary<string, string>();
 
-                        if (!threadInfo.ExportSettings.WriteOnlyToMainDataFolder ||
-                            threadInfo.ExportSettings.ClearMainFolderBeforeWriting)
+                        //if (!threadInfo.ExportSettings.WriteOnlyToMainDataFolder ||
+                        //    threadInfo.ExportSettings.ClearMainFolderBeforeWriting)
+                        if (_settings.IsScheduler || _settings.WinAppSettings.ClearMainFolderBeforeWriting) //threadInfo.ExportSettings.ClearMainFolderBeforeWriting)
                         {
-                            var destFolder = threadInfo.ExportSettings.WriteOnlyToMainDataFolder
-                                ? threadInfo.ExportSettings.PathToExportDataMain
-                                : threadInfo.ExportSettings.PathToExportDataTemp;
-                            if (threadInfo.ExportSettings.WriteOnlyToMainDataFolder &&
-                                threadInfo.ExportSettings.UseProcessesSubFoldersInMain)
-                                destFolder = Path.Combine(destFolder, threadInfo.ProcessSubFolder);
+                            var destFolder = _settings.IsWinApp //threadInfo.ExportSettings.WriteOnlyToMainDataFolder
+                                ? _settings.ExportSettings.PathToExportDataMain //threadInfo.ExportSettings.PathToExportDataMain
+                                : _settings.SchedulerSettings.PathToExportDataTemp; //threadInfo.ExportSettings.PathToExportDataTemp;
+                            //if (threadInfo.ExportSettings.WriteOnlyToMainDataFolder &&
+                            //    threadInfo.ExportSettings.UseProcessesSubFoldersInMain)
+                            //    destFolder = Path.Combine(destFolder, threadInfo.ProcessSubFolder);
                             destFolder = Path.Combine(destFolder, threadInfo.DBSubfolder, threadInfo.UserNameSubfolder);
                             FilesManager.DeleteDirectory(destFolder);
                         }
@@ -902,26 +913,26 @@ namespace OracleStructExporter.Core
 
                 }
 
-                if (!threadInfo.ExportSettings.WriteOnlyToMainDataFolder)
+                //if (!threadInfo.ExportSettings.WriteOnlyToMainDataFolder)
+                if (_settings.IsScheduler)
                 {
                     if (progressManager.CurrentThreadErrorsCount > 0)
                         MoveFilesToErrorFolder(threadInfo, progressManager);
                     else
-
                         MoveFilesToMainFolder(threadInfo, progressManager);
                 }
 
-                if (threadInfo.ExportSettings.RepoSettings != null)
+                if (_settings.IsScheduler && _settings.SchedulerSettings.RepoSettings!=null) //threadInfo.ExportSettings.RepoSettings != null)
                 {
-                    if (threadInfo.ExportSettings.RepoSettings.SimpleFileRepo != null &&
-                        threadInfo.ExportSettings.RepoSettings.SimpleFileRepo.CommitToRepoAfterSuccess &&
+                    if (_settings.SchedulerSettings.RepoSettings.SimpleFileRepo != null &&
+                        _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.CommitToRepoAfterSuccess &&
                         progressManager.CurrentThreadErrorsCount == 0)
                     {
                         CreateSimpleRepoCommit(threadInfo, progressManager);
                     }
 
-                    if (threadInfo.ExportSettings.RepoSettings.GitLabRepo != null &&
-                        threadInfo.ExportSettings.RepoSettings.GitLabRepo.CommitToRepoAfterSuccess &&
+                    if (_settings.SchedulerSettings.RepoSettings.GitLabRepo != null &&
+                        _settings.SchedulerSettings.RepoSettings.GitLabRepo.CommitToRepoAfterSuccess &&
                         progressManager.CurrentThreadErrorsCount == 0)
                     {
                         //TODO копирование сформированных данным экспортом файлов из папки PathToExportDataMain в папку PathToExportDataForRepo (если задано настройками)
@@ -946,8 +957,8 @@ namespace OracleStructExporter.Core
 
         public async void StartWork(ThreadInfo threadInfo, CancellationToken ct, bool testMode)
         {
-            var progressManager =
-                new ProgressDataManager(_progressReporter, threadInfo.ProcessId, threadInfo.Connection);
+            var progressManager = new ProgressDataManager(_progressReporter);
+            progressManager.SetSchedulerProps(threadInfo.ProcessId, threadInfo.Connection);
 
             _mainProgressManager.ChildProgressManagers.Add(progressManager);
 
@@ -981,7 +992,8 @@ namespace OracleStructExporter.Core
                 progressDataProcMain.SetTextAddInfo("SCHEMAS_SUCCESS", schemasSuccess);
                 progressDataProcMain.SetTextAddInfo("SCHEMAS_ERROR", schemasWithErrors);
                 _mainProgressManager.ReportCurrentProgress(progressDataProcMain);
-                EndProcess(_settings.LogSettings.DBLog.DBLogPrefix, progressDataProcMain);
+                if (_settings.IsScheduler)
+                    EndProcess(_settings.SchedulerSettings.DBLog.DBLogPrefix, progressDataProcMain);
                 //}
             }
         }
@@ -998,13 +1010,9 @@ namespace OracleStructExporter.Core
             //}
             
 
-            if (_settings.LogSettings.DBLog.Enabled)
+            if (_settings.IsScheduler)
             {
-                _mainDbWorker.SaveNewProcessInDBLog(currentDateTime, _threadInfoList.Count, _settings.LogSettings.DBLog.DBLogPrefix, out _processId);
-            }
-            else
-            {
-                //TODO пробуем работать с processId в файле
+                _mainDbWorker.SaveNewProcessInDBLog(currentDateTime, _threadInfoList.Count, _settings.SchedulerSettings.DBLog.DBLogPrefix, out _processId);
             }
 
             _mainProgressManager.SetProcessId(_processId);
@@ -1016,15 +1024,10 @@ namespace OracleStructExporter.Core
 
         public void EndProcess(string dbLogPrefix, ExportProgressData progressData)
         {
-            if (_settings.LogSettings.DBLog.Enabled)
-            {
-                _mainDbWorker.UpdateProcessInDBLog(DateTime.Now, dbLogPrefix, progressData);
-            }
-            else
-            {
-                //TODO пробуем работать с processId в файле
-            }
-
+            //if (_settings.LogSettings.DBLog.Enabled)
+            //{
+            _mainDbWorker.UpdateProcessInDBLog(DateTime.Now, dbLogPrefix, progressData);
+            //}
         }
 
         //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
@@ -1032,11 +1035,11 @@ namespace OracleStructExporter.Core
         //    return _mainDbWorker.GetLastSuccessExportForSchema(dbidC, username);
         //}
 
-        public List<SchemaWorkAggrStat> GetAggrStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
-        {
-            var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
-            return SchemaWorkAggrStat.GetAggrStat(plainStat, scheduledConnections);
-        }
+        //public List<SchemaWorkAggrStat> GetAggrStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
+        //{
+        //    var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
+        //    return SchemaWorkAggrStat.GetAggrStat(plainStat, scheduledConnections);
+        //}
 
         public List<SchemaWorkAggrFullStat> GetAggrFullStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
         {
