@@ -10,18 +10,29 @@ namespace OracleStructExporter.Core
 {
     public class Logger
     {
-        LogSettings _logSettings;
+        //LogSettings _logSettings;
+        TextFilesLog _textFilesLog;
+        DBLog _dbLog;
 
         //Connection _connection;
-        static object lockObj = 0;
+        static object lockObj1 = 0;
+        static object lockObj2 = 0;
+        static object lockObj3 = 0;
+        static object lockObj4 = 0;
 
         private const string textSplitter =
             "-----------------------------------------------------------------------------------------------------------------------";
 
-        public Logger(LogSettings logSettings)
+        //public Logger(LogSettings logSettings)
+        //{
+        //    _logSettings = logSettings;
+        //    //_connection = connection;
+        //}
+
+        public Logger(TextFilesLog textFilesLog, DBLog dbLog = null)
         {
-            _logSettings = logSettings;
-            //_connection = connection;
+            _textFilesLog = textFilesLog;
+            _dbLog = dbLog;
         }
 
         public bool IsNecessaryToInsertLogEntry(ExportProgressDataLevel progressDataLevel,
@@ -29,7 +40,8 @@ namespace OracleStructExporter.Core
         {
             if (progressDataLevel == ExportProgressDataLevel.ERROR)
                 return true;
-            var curLog = logType == LogType.TextFilesLog ? (Log) _logSettings.TextFilesLog : (Log) _logSettings.DBLog;
+            var curLog = logType == LogType.TextFilesLog ? (Log) _textFilesLog : (Log) _dbLog;
+            if (curLog == null) return false;
             if (!curLog.ExcludeStageInfoC.Any())
                 return true;
             foreach (var stage in curLog.ExcludeStageInfoC.Keys)
@@ -48,57 +60,62 @@ namespace OracleStructExporter.Core
         {
             messageText = "";
 
-            lock (lockObj)
+
+            if (!checkOnNecessaryBySettings ||
+                IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.TextFilesLog))
             {
-                if (!checkOnNecessaryBySettings ||
-                    IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.TextFilesLog))
+                //готовим текст
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                    progressData.Level == ExportProgressDataLevel.STAGESTARTINFO)
                 {
-                    //готовим текст
-                    if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
-                        progressData.Level == ExportProgressDataLevel.STAGESTARTINFO)
+                    //вставляем стартовый разделитель
+                    //messageText += Environment.NewLine;
+                    messageText += textSplitter + Environment.NewLine;
+                    messageText += "НАЧАЛО РАБОТЫ" + Environment.NewLine;
+                    messageText += textSplitter + Environment.NewLine;
+                    messageText += Environment.NewLine;
+                }
+
+                messageText +=
+                    $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId}. {progressData.Message}{Environment.NewLine}";
+
+                if (progressData.Level == ExportProgressDataLevel.ERROR &&
+                    !string.IsNullOrWhiteSpace(progressData.ErrorDetails))
+                    messageText += progressData.ErrorDetails + Environment.NewLine;
+
+                if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
+                    progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
+                {
+                    //вставляем финальный разделитель
+                    messageText += Environment.NewLine;
+                    messageText += textSplitter + Environment.NewLine;
+                    messageText += "КОНЕЦ РАБОТЫ" + Environment.NewLine;
+                    messageText += textSplitter + Environment.NewLine;
+                    messageText += Environment.NewLine;
+                }
+
+                if (_textFilesLog.Enabled)
+                {
+                    //сохраняем в файл запись лога
+                    var encodingToFile1251 = Encoding.GetEncoding(1251);
+                    var pathToLog = _textFilesLog.PathToLogFilesC;
+                    var fileName = Path.Combine(pathToLog,
+                        $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}.txt");
+
+                    lock (lockObj1)
                     {
-                        //вставляем стартовый разделитель
-                        //messageText += Environment.NewLine;
-                        messageText += textSplitter + Environment.NewLine;
-                        messageText += "НАЧАЛО РАБОТЫ" + Environment.NewLine;
-                        messageText += textSplitter + Environment.NewLine;
-                        messageText += Environment.NewLine;
-                    }
-
-                    messageText +=
-                        $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId}. {progressData.Message}{Environment.NewLine}";
-
-                    if (progressData.Level == ExportProgressDataLevel.ERROR &&
-                        !string.IsNullOrWhiteSpace(progressData.ErrorDetails))
-                        messageText += progressData.ErrorDetails + Environment.NewLine;
-
-                    if (progressData.Stage == ExportProgressDataStage.PROCESS_SCHEMA &&
-                        progressData.Level == ExportProgressDataLevel.STAGEENDINFO)
-                    {
-                        //вставляем финальный разделитель
-                        messageText += Environment.NewLine;
-                        messageText += textSplitter + Environment.NewLine;
-                        messageText += "КОНЕЦ РАБОТЫ" + Environment.NewLine;
-                        messageText += textSplitter + Environment.NewLine;
-                        messageText += Environment.NewLine;
-                    }
-
-                    if (_logSettings.TextFilesLog.Enabled)
-                    {
-                        //сохраняем в файл запись лога
-                        var encodingToFile1251 = Encoding.GetEncoding(1251);
-                        var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
-                        var fileName = Path.Combine(pathToLog,
-                            $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}.txt");
                         if (!Directory.Exists(pathToLog))
                             Directory.CreateDirectory(pathToLog);
+
                         using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
                         {
                             // Записываем DDL объекта
                             writer.Write(messageText);
                         }
                     }
+
                 }
+
             }
         }
 
@@ -109,6 +126,7 @@ namespace OracleStructExporter.Core
             if (progressData.Stage == ExportProgressDataStage.CREATE_SIMPLE_FILE_REPO_COMMIT &&
                 progressData.Level == ExportProgressDataLevel.STAGEENDINFO && logCommitsContent)
             {
+
                 var commitsList = progressData.GetAddInfo<List<RepoChangeItem>>("REPO_CHANGES");
                 var res =
                     $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId ?? "не задано"}{Environment.NewLine}";
@@ -119,19 +137,20 @@ namespace OracleStructExporter.Core
 
                 //сохраняем в файл запись лога
                 var encodingToFile1251 = Encoding.GetEncoding(1251);
-                var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
+                var pathToLog = _textFilesLog.PathToLogFilesC;
                 var fileName = Path.Combine(pathToLog,
                     $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}_commits.txt");
-                if (!Directory.Exists(pathToLog))
-                    Directory.CreateDirectory(pathToLog);
-                using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                lock (lockObj2)
                 {
-                    // Записываем DDL объекта
-                    writer.Write(res);
+                    if (!Directory.Exists(pathToLog))
+                        Directory.CreateDirectory(pathToLog);
+                    using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                    {
+                        // Записываем DDL объекта
+                        writer.Write(res);
+                    }
                 }
-
             }
-
         }
 
         public void InsertMainTextFileLog(ExportProgressData progressData, bool checkOnNecessaryBySettings)
@@ -171,19 +190,22 @@ namespace OracleStructExporter.Core
                     messageText += Environment.NewLine;
                 }
 
-                if (_logSettings.TextFilesLog.Enabled)
+                if (_textFilesLog.Enabled)
                 {
                     //сохраняем в файл запись лога
                     var encodingToFile1251 = Encoding.GetEncoding(1251);
-                    var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
+                    var pathToLog = _textFilesLog.PathToLogFilesC;
                     var fileName = Path.Combine(pathToLog,
                         "log.txt");
-                    if (!Directory.Exists(pathToLog))
-                        Directory.CreateDirectory(pathToLog);
-                    using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                    lock (lockObj3)
                     {
-                        // Записываем DDL объекта
-                        writer.Write(messageText);
+                        if (!Directory.Exists(pathToLog))
+                            Directory.CreateDirectory(pathToLog);
+                        using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                        {
+                            // Записываем DDL объекта
+                            writer.Write(messageText);
+                        }
                     }
                 }
             }
@@ -202,22 +224,24 @@ namespace OracleStructExporter.Core
             messageText += Environment.NewLine;
 
 
-            if (_logSettings.TextFilesLog.Enabled)
+            if (_textFilesLog.Enabled)
             {
                 //сохраняем в файл запись лога
                 var encodingToFile1251 = Encoding.GetEncoding(1251);
-                var pathToLog = _logSettings.TextFilesLog.PathToLogFilesC;
+                var pathToLog = _textFilesLog.PathToLogFilesC;
                 var fileFullName = Path.Combine(pathToLog,
                     fileName);
-                if (!Directory.Exists(pathToLog))
-                    Directory.CreateDirectory(pathToLog);
-                using (StreamWriter writer = new StreamWriter(fileFullName, true, encodingToFile1251))
+                lock (lockObj4)
                 {
-                    // Записываем DDL объекта
-                    writer.Write(messageText);
+                    if (!Directory.Exists(pathToLog))
+                        Directory.CreateDirectory(pathToLog);
+                    using (StreamWriter writer = new StreamWriter(fileFullName, true, encodingToFile1251))
+                    {
+                        // Записываем DDL объекта
+                        writer.Write(messageText);
+                    }
                 }
             }
-
         }
 
         public void InsertThreadsDBLog(ExportProgressData progressData, bool checkOnNecessaryBySettings,
@@ -226,12 +250,12 @@ namespace OracleStructExporter.Core
             if (!checkOnNecessaryBySettings ||
                 IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.DBLog))
             {
-                if (_logSettings.DBLog.Enabled)
-                {
+                //if (_logSettings.DBLog.Enabled)
+                //{
                     //сохраняем в файл запись лога
-                    DbWorker.SaveConnWorkLogInDB(_logSettings.DBLog.DBLogPrefix, progressData, connectionString,
+                    DbWorker.SaveConnWorkLogInDB(_dbLog.DBLogPrefix, progressData, connectionString,
                         dbLogSettings);
-                }
+                //}
             }
 
         }
@@ -245,12 +269,12 @@ namespace OracleStructExporter.Core
             //if (!checkOnNecessaryBySettings ||
             //    IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.DBLog))
             {
-                if (_logSettings.DBLog.Enabled)
-                {
+                //if (_logSettings.DBLog.Enabled)
+                //{
                     //сохраняем в файл запись лога
-                    DbWorker.SaveRepoChangesInDB(_logSettings.DBLog.DBLogPrefix, progressData, connectionString,
+                    DbWorker.SaveRepoChangesInDB(_dbLog.DBLogPrefix, progressData, connectionString,
                         dbLogSettings, saveDetails);
-                }
+                //}
             }
 
         }
@@ -297,156 +321,156 @@ namespace OracleStructExporter.Core
         //    return "Нет заданий и статистики";
         //}
 
-        public string GetStatInfo(List<SchemaWorkAggrStat> statList, int lastDaysToAnalyz)
-        {
-            if (statList.Any())
-            {
-                var table = new TableBuilder.TableBuilder();
-                var columns = new List<Column>();
-                table.Columns = columns;
+        //public string GetStatInfo(List<SchemaWorkAggrStat> statList, int lastDaysToAnalyz)
+        //{
+        //    if (statList.Any())
+        //    {
+        //        var table = new TableBuilder.TableBuilder();
+        //        var columns = new List<Column>();
+        //        table.Columns = columns;
 
-                columns.AddRange(new[]
-                {
-                    new Column {Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left},
-                    new Column {Id = "username", MaxWidth = 30, Alignment = Alignment.Left},
-                    new Column {Id = "plan", MaxWidth = 7, Alignment = Alignment.Center},
-                    new Column {Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right},
-                    new Column {Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right},
-                    new Column {Id = "oneinhoursfact", MaxWidth = 10, Alignment = Alignment.Right},
-                    new Column {Id = "lastsuccess", MaxWidth = 16, Alignment = Alignment.Center},
-                    new Column {Id = "succsesscount", MaxWidth = 10, Alignment = Alignment.Right},
-                    new Column {Id = "lasterror", MaxWidth = 16, Alignment = Alignment.Center},
-                    new Column {Id = "errorscount", MaxWidth = 10, Alignment = Alignment.Right},
-                    new Column {Id = "avgtime", MaxWidth = 9, Alignment = Alignment.Right},
-                    new Column {Id = "avgsize", MaxWidth = 9, Alignment = Alignment.Right}
-                });
+        //        columns.AddRange(new[]
+        //        {
+        //            new Column {Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left},
+        //            new Column {Id = "username", MaxWidth = 30, Alignment = Alignment.Left},
+        //            new Column {Id = "plan", MaxWidth = 7, Alignment = Alignment.Center},
+        //            new Column {Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right},
+        //            new Column {Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right},
+        //            new Column {Id = "oneinhoursfact", MaxWidth = 10, Alignment = Alignment.Right},
+        //            new Column {Id = "lastsuccess", MaxWidth = 16, Alignment = Alignment.Center},
+        //            new Column {Id = "succsesscount", MaxWidth = 10, Alignment = Alignment.Right},
+        //            new Column {Id = "lasterror", MaxWidth = 16, Alignment = Alignment.Center},
+        //            new Column {Id = "errorscount", MaxWidth = 10, Alignment = Alignment.Right},
+        //            new Column {Id = "avgtime", MaxWidth = 9, Alignment = Alignment.Right},
+        //            new Column {Id = "avgsize", MaxWidth = 9, Alignment = Alignment.Right}
+        //        });
 
-                var headerRows = new List<List<HeaderCell>>();
-                table.HeaderRows = headerRows;
+        //        var headerRows = new List<List<HeaderCell>>();
+        //        table.HeaderRows = headerRows;
 
-                headerRows.Add(new List<HeaderCell>
-                {
-                    new HeaderCell
-                        {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 12}
-                });
+        //        headerRows.Add(new List<HeaderCell>
+        //        {
+        //            new HeaderCell
+        //                {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 12}
+        //        });
 
-                headerRows.Add(new List<HeaderCell>
-                {
-                    new HeaderCell {Content = "БД", ColumnId = "dbid", RowSpan = 2},
-                    new HeaderCell {Content = "Схема", ColumnId = "username", RowSpan = 2},
-                    new HeaderCell {Content = "План", ColumnId = "plan", RowSpan = 2},
-                    new HeaderCell {Content = "Время до планового запуска", ColumnId = "timebeforeplan", RowSpan = 2},
-                    new HeaderCell {Content = "Раз в X часов", ColumnId = "oneinhoursplan", ColSpan = 2},
-                    new HeaderCell {Content = "Успешные запуски", ColumnId = "lastsuccess", ColSpan = 2},
-                    new HeaderCell {Content = "Неуспешные запуски", ColumnId = "lasterror", ColSpan = 2},
-                    new HeaderCell {Content = "Среднее время (мин)", ColumnId = "avgtime", RowSpan = 2},
-                    new HeaderCell {Content = "Средний объем", ColumnId = "avgsize", RowSpan = 2}
-                });
+        //        headerRows.Add(new List<HeaderCell>
+        //        {
+        //            new HeaderCell {Content = "БД", ColumnId = "dbid", RowSpan = 2},
+        //            new HeaderCell {Content = "Схема", ColumnId = "username", RowSpan = 2},
+        //            new HeaderCell {Content = "План", ColumnId = "plan", RowSpan = 2},
+        //            new HeaderCell {Content = "Время до планового запуска", ColumnId = "timebeforeplan", RowSpan = 2},
+        //            new HeaderCell {Content = "Раз в X часов", ColumnId = "oneinhoursplan", ColSpan = 2},
+        //            new HeaderCell {Content = "Успешные запуски", ColumnId = "lastsuccess", ColSpan = 2},
+        //            new HeaderCell {Content = "Неуспешные запуски", ColumnId = "lasterror", ColSpan = 2},
+        //            new HeaderCell {Content = "Среднее время (мин)", ColumnId = "avgtime", RowSpan = 2},
+        //            new HeaderCell {Content = "Средний объем", ColumnId = "avgsize", RowSpan = 2}
+        //        });
 
 
-                headerRows.Add(new List<HeaderCell>
-                {
+        //        headerRows.Add(new List<HeaderCell>
+        //        {
 
-                    new HeaderCell {Content = "план", ColumnId = "oneinhoursplan"},
-                    new HeaderCell {Content = "факт", ColumnId = "oneinhoursfact"},
-                    new HeaderCell {Content = "последний", ColumnId = "lastsuccess"},
-                    new HeaderCell {Content = "кол-во", ColumnId = "succsesscount"},
-                    new HeaderCell {Content = "последний", ColumnId = "lasterror"},
-                    new HeaderCell {Content = "кол-во", ColumnId = "errorscount"}
+        //            new HeaderCell {Content = "план", ColumnId = "oneinhoursplan"},
+        //            new HeaderCell {Content = "факт", ColumnId = "oneinhoursfact"},
+        //            new HeaderCell {Content = "последний", ColumnId = "lastsuccess"},
+        //            new HeaderCell {Content = "кол-во", ColumnId = "succsesscount"},
+        //            new HeaderCell {Content = "последний", ColumnId = "lasterror"},
+        //            new HeaderCell {Content = "кол-во", ColumnId = "errorscount"}
 
-                });
+        //        });
 
-                var dataRows = new List<List<DataCell>>();
-                table.DataRows = dataRows;
+        //        var dataRows = new List<List<DataCell>>();
+        //        table.DataRows = dataRows;
 
-                foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MaxValue))
-                {
-                    var dataRow = new List<DataCell>
-                    {
-                        new DataCell
-                        {
-                            Content = statItem.DBId,
-                            ColumnId = "dbid"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.UserName,
-                            ColumnId = "username"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.IsScheduled ? "да" : "нет",
-                            ColumnId = "plan"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.TimeBeforePlanLaunch == null
-                                ? string.Empty
-                                : statItem.TimeBeforePlanLaunch.Value.ToStringFormat(false),
-                            ColumnId = "timebeforeplan"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.OneTimePerHoursPlan == null
-                                ? string.Empty
-                                : statItem.OneTimePerHoursPlan.Value.ToString(),
-                            ColumnId = "oneinhoursplan"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.OneTimePerHoursFact == null
-                                ? string.Empty
-                                : statItem.OneTimePerHoursFact.Value.ToStringFormat(1),
-                            ColumnId = "oneinhoursfact"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.LastSuccessLaunchFactTime == null
-                                ? string.Empty
-                                : statItem.LastSuccessLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
-                            ColumnId = "lastsuccess"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.SuccessLaunchesCount.ToString(),
-                            ColumnId = "succsesscount"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.LastErrorLaunchFactTime == null
-                                ? string.Empty
-                                : statItem.LastErrorLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
-                            ColumnId = "lasterror"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.ErrorLaunchesCount.ToString(),
-                            ColumnId = "errorscount"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.AvgSuccessLaunchDurationInMinutes == null
-                                ? string.Empty
-                                : statItem.AvgSuccessLaunchDurationInMinutes.Value.ToStringFormat(1),
-                            ColumnId = "avgtime"
-                        },
-                        new DataCell
-                        {
-                            Content = statItem.AvgSuccessLaunchObjectsFactCount == null
-                                ? string.Empty
-                                : statItem.AvgSuccessLaunchObjectsFactCount.Value.ToStringFormat(0),
-                            ColumnId = "avgsize"
-                        }
-                    };
-                    dataRows.Add(dataRow);
-                }
+        //        foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MaxValue))
+        //        {
+        //            var dataRow = new List<DataCell>
+        //            {
+        //                new DataCell
+        //                {
+        //                    Content = statItem.DBId,
+        //                    ColumnId = "dbid"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.UserName,
+        //                    ColumnId = "username"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.IsScheduled ? "да" : "нет",
+        //                    ColumnId = "plan"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.TimeBeforePlanLaunch == null
+        //                        ? string.Empty
+        //                        : statItem.TimeBeforePlanLaunch.Value.ToStringFormat(false),
+        //                    ColumnId = "timebeforeplan"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.OneTimePerHoursPlan == null
+        //                        ? string.Empty
+        //                        : statItem.OneTimePerHoursPlan.Value.ToString(),
+        //                    ColumnId = "oneinhoursplan"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.OneTimePerHoursFact == null
+        //                        ? string.Empty
+        //                        : statItem.OneTimePerHoursFact.Value.ToStringFormat(1),
+        //                    ColumnId = "oneinhoursfact"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.LastSuccessLaunchFactTime == null
+        //                        ? string.Empty
+        //                        : statItem.LastSuccessLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+        //                    ColumnId = "lastsuccess"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.SuccessLaunchesCount.ToString(),
+        //                    ColumnId = "succsesscount"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.LastErrorLaunchFactTime == null
+        //                        ? string.Empty
+        //                        : statItem.LastErrorLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+        //                    ColumnId = "lasterror"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.ErrorLaunchesCount.ToString(),
+        //                    ColumnId = "errorscount"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.AvgSuccessLaunchDurationInMinutes == null
+        //                        ? string.Empty
+        //                        : statItem.AvgSuccessLaunchDurationInMinutes.Value.ToStringFormat(1),
+        //                    ColumnId = "avgtime"
+        //                },
+        //                new DataCell
+        //                {
+        //                    Content = statItem.AvgSuccessLaunchObjectsFactCount == null
+        //                        ? string.Empty
+        //                        : statItem.AvgSuccessLaunchObjectsFactCount.Value.ToStringFormat(0),
+        //                    ColumnId = "avgsize"
+        //                }
+        //            };
+        //            dataRows.Add(dataRow);
+        //        }
 
-                string result = table.ToString();
-                return result;
-            }
+        //        string result = table.ToString();
+        //        return result;
+        //    }
 
-            return "Нет заданий и статистики";
-        }
+        //    return "Нет заданий и статистики";
+        //}
 
         public string GetStatInfoV2(List<SchemaWorkAggrFullStat> statList, int lastDaysToAnalyz)
         {
@@ -1125,18 +1149,17 @@ namespace OracleStructExporter.Core
 
             var headerRows = new List<List<HeaderCell>>();
             table.HeaderRows = headerRows;
-            headerRows.Add(new List<HeaderCell>
-            {
-                new HeaderCell {Content = "БД", ColumnId = "dbid"},
-                new HeaderCell {Content = "Схема", ColumnId = "username"}
-            });
+            
+            var headerCells = new List<HeaderCell>();
+            headerRows.Add(headerCells);
+
+            headerCells.Add(new HeaderCell { Content = "БД", ColumnId = "dbid" });
+            headerCells.Add(new HeaderCell { Content = "Схема", ColumnId = "username" });
+
             if (usePrognozInfo)
             {
-                headerRows.Add(new List<HeaderCell>
-                {
-                    new HeaderCell {Content = "Кол-во объектов (прогноз)", ColumnId = "objectscount"},
-                    new HeaderCell {Content = "Длит-сть (минут, прогноз)", ColumnId = "duration"}
-                });
+                headerCells.Add(new HeaderCell { Content = "Кол-во объектов (прогноз)", ColumnId = "objectscount" });
+                headerCells.Add(new HeaderCell { Content = "Длит-сть (минут, прогноз)", ColumnId = "duration" });
             }
 
             var dataRows = new List<List<DataCell>>();

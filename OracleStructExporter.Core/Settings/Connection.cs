@@ -45,6 +45,7 @@ namespace OracleStructExporter.Core
             }
         }
 
+        //TODO доработать для Scheduler
         public ExportSettingsDetails ExportSettingsDetails { get; set; }
 
         public string UserNameAndDBIdC

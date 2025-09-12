@@ -116,7 +116,7 @@ namespace OracleStructExporter.Core
 
             var res = statList.
                 OrderBy(c => c.IsScheduled ? 0 : 1).
-                ThenBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.Zero).
+                ThenBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MinValue).
                 ThenBy(c => c.DBId).
                 ThenBy(c => c.UserName).
                 ToList();
@@ -312,6 +312,13 @@ namespace OracleStructExporter.Core
                     {
                         var nextScheduleTime = item.LastLaunchFactTime.Value.AddHours(item.OneTimePerHoursPlan.Value);
                         item.TimeBeforePlanLaunch = nextScheduleTime - DateTime.Now;
+
+                        //если последней была ошибка, сокращаем интервал вдвое
+                        if (item.LastErrorLaunchFactTime != null && item.LastSuccessLaunchFactTime != null &&
+                            item.LastErrorLaunchFactTime > item.LastSuccessLaunchFactTime)
+                        {
+                            item.TimeBeforePlanLaunch = item.TimeBeforePlanLaunch.Value.DivideBy(2);
+                        }
                     }
                 }
             }

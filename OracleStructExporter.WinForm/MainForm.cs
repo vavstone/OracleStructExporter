@@ -51,7 +51,7 @@ namespace OracleStructExporter.WinForm
         void LoadSettingsFromFile()
         {
             settings = SettingsHelper.LoadSettings();
-            settings.RepairSettingsValues();
+            //settings.RepairSettingsValues();
         }
 		
 		private void LoadConnectionsGrid()
@@ -120,7 +120,7 @@ namespace OracleStructExporter.WinForm
         private void btnExport_Click(object sender, EventArgs e)
         {
             threads = new List<ThreadInfo>();
-            logger = new Logger(settings.LogSettings);
+            logger = new Logger(settings.TextFilesLog);
 
             UpdateSettingsFromInputs(settings);
 
@@ -242,7 +242,7 @@ namespace OracleStructExporter.WinForm
             {
                 //сообщения от потоков
                 logger.InsertThreadsTextFileLog(progressData, true, out message);
-                logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString, settings.LogSettings.DBLog);
+                //logger.InsertThreadsDBLog(progressData, true, exporter.LogDBConnectionString, settings.LogSettings.DBLog);
 
                 var currentThreadLogInfoControl = threadLogInfoControls.FirstOrDefault(c =>
                     c.Connection.DBIdC.ToUpper() == progressData.CurrentConnection.DBIdC.ToUpper() &&

@@ -141,7 +141,6 @@ namespace OracleStructExporter.Core
             get
             {
                 var objectAddStr = string.IsNullOrWhiteSpace(ObjectName) ? "" : $" при обработке {ObjectName}";
-                var connectAddStr = $"{CurrentConnection.UserName}@{CurrentConnection.DBIdC}";
                 if (Level == ExportProgressDataLevel.ERROR) return $"Ошибка{objectAddStr}! {Error}";
                 if (Level == ExportProgressDataLevel.CANCEL) return "Операция отменена пользователем!";
                 if (Level == ExportProgressDataLevel.MOMENTALEVENTINFO) return GetTextAddInfo("MOMENTAL_INFO");
@@ -171,6 +170,7 @@ namespace OracleStructExporter.Core
 
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)
                 {
+                    var connectAddStr = $"{CurrentConnection.UserName}@{CurrentConnection.DBIdC}";
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Выгрузка объектов схемы {connectAddStr}...";
                     var errorsAddStr = "";

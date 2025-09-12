@@ -6,6 +6,8 @@ namespace OracleStructExporter.Core
 {
     public class TextFilesLog:Log
     {
+        [XmlAttribute]
+        public bool Enabled { get; set; }
         [XmlElement]
         public string PathToLogFiles { get; set; }
         [XmlIgnore]

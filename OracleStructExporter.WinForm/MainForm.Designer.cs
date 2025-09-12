@@ -430,6 +430,7 @@
             // 
             this.tbNameObjectMaskExclude.Location = new System.Drawing.Point(150, 201);
             this.tbNameObjectMaskExclude.Name = "tbNameObjectMaskExclude";
+            this.tbNameObjectMaskExclude.ReadOnly = true;
             this.tbNameObjectMaskExclude.Size = new System.Drawing.Size(604, 20);
             this.tbNameObjectMaskExclude.TabIndex = 31;
             // 
