@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Globalization;
 
-namespace TextProc.Core
+namespace ServiceCheck.Core
 {
     public class HData
     {

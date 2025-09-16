@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Text;
 
-namespace TextProc.Core
+namespace ServiceCheck.Core
 {
     public static class Processor
     {

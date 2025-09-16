@@ -46,7 +46,6 @@ namespace ServiceCheck.Scheduler
 
                 //для отладки!!!!!!!!
                 //prefixForGettingStat = "OSECA";
-                //testMode = true;
 
                 // Проверка на уже запущенные экземпляры
                 if (IsAlreadyRunning())

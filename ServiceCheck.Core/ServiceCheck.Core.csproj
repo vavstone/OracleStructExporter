@@ -110,13 +110,10 @@
     <Compile Include="TableBuilder.cs" />
     <Compile Include="ThreadInfo.cs" />
     <Compile Include="FilesManager.cs" />
+    <Compile Include="TP\HData.cs" />
+    <Compile Include="TP\Processor.cs" />
     <Compile Include="VcsManager.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\TextProc.Core\TextProc.Core.csproj">
-      <Project>{b092da34-135e-4112-b700-9882a4057b21}</Project>
-      <Name>TextProc.Core</Name>
-    </ProjectReference>
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

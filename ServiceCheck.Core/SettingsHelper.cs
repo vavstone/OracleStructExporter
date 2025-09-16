@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Xml.Serialization;
-using TextProc.Core;
 
 namespace ServiceCheck.Core
 {
