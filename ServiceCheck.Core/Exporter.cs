@@ -284,79 +284,71 @@ namespace ServiceCheck.Core
             _mainDbWorker = new DbWorker(connectionString, _mainProgressManager, null);
         }
 
-        public async void StartWork(List<ThreadInfo> threadInfoList, string connToProcessInfo, bool isAsyncMode, bool testMode)
+        public /*async*/ void StartWork(List<ThreadInfo> threadInfoList, string connToProcessInfo, bool isAsyncMode,
+            bool testMode)
         {
-            // Если задача уже выполняется
             if (_cancellationTokenSource != null)
                 throw new Exception("Задача уже выполняется");
-            
             _startDateTime = DateTime.Now;
-
             _threadInfoList = threadInfoList;
+            _cancellationTokenSource = new CancellationTokenSource();
+            var ct = _cancellationTokenSource.Token;
+
+            if (_mainDbWorker != null)
+                _mainDbWorker.SetCancellationToken(ct);
+
+            StartProcess(_startDateTime, connToProcessInfo /*, ct*/);
+            _threadInfoList.ForEach(c => c.ProcessId = _processId);
 
 
-            //try
+            //foreach (var threadInfo in _threadInfoList)
             //{
-                _cancellationTokenSource = new CancellationTokenSource();
-                var ct = _cancellationTokenSource.Token;
+            //    if (isAsyncMode)
+            //        Task.Run(() => StartWork(threadInfo, ct, testMode), ct);
+            //    else
+            //        StartWork(threadInfo, ct, testMode);
+            //}
 
-                if (_mainDbWorker!=null)
-                    _mainDbWorker.SetCancellationToken(ct);
-
-            //using (OracleConnection connection = new OracleConnection(connectionString))
-            //{
-            //    connection.Open();
-
-            //var schemasToWork = threadInfoList.Select(c => c.Connection.UserNameAndDBIdC).ToList()
-            //    .MergeFormatted("", ",");
-
-
-            StartProcess(_startDateTime, connToProcessInfo/*, ct*/);
-                    //_mainDbWorker.SaveNewProcessInDBLog(_startDateTime, threadInfoList.Count,
-                    //    _settings.LogSettings.DBLog.DBLogPrefix, out _processId);
-                //}
-
-                //_mainProgressManager.SetProcessId(_processId);
-                _threadInfoList.ForEach(c => c.ProcessId = _processId);
+            if (isAsyncMode)
+            {
+                // Запускаем все задачи параллельно и ждем их завершения
+                var tasks = new List<Task>();
                 foreach (var threadInfo in _threadInfoList)
                 {
-                    if (isAsyncMode)
-                        Task.Run(() => StartWork(threadInfo, ct, testMode), ct);
-                    else
-                    StartWork(threadInfo, ct, testMode);
+                    tasks.Add(Task.Factory.StartNew(() =>
+                        StartWork(threadInfo, ct, testMode), ct));
+                }
+
+                // Задача для ожидания завершения всех задач
+                //Task.Factory.ContinueWhenAll(tasks.ToArray(), completedTasks =>
+                //{
+                //    if (!ct.IsCancellationRequested)
+                //    {
+                //        var progressData = new ExportProgressData 
+                //        { 
+                //            Message = $"End! {DateTime.Now.ToLongTimeString()}" 
+                //        };
+                //        _progressReporter.Report(progressData);
+                //    }
+                //    _cancellationTokenSource = null;
+                //}, ct, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
             }
-            //}
-            //finally
-            //{
-            //    _cancellationTokenSource?.Dispose();
-            //    _cancellationTokenSource = null;
-            //}
+            else
+            {
+                // Синхронный режим
+                foreach (var threadInfo in _threadInfoList)
+                {
+                    StartWork(threadInfo, ct, testMode);
+                }
+                //var progressData = new ExportProgressData 
+                //{ 
+                //    Message = $"End! {DateTime.Now.ToLongTimeString()}" 
+                //};
+                //_progressReporter.Report(progressData);
+                //_cancellationTokenSource = null;
+            }
+
         }
-
-        //public void StartWorkSync(List<ThreadInfo> threadInfoList)
-        //{
-        //    // Если задача уже выполняется
-        //    if (_cancellationTokenSource != null)
-        //        throw new Exception("Задача уже выполняется");
-            
-        //    _startDateTime = DateTime.Now;
-        //    _threadInfoList = threadInfoList;
-            
-        //    _cancellationTokenSource = new CancellationTokenSource();
-        //    var ct = _cancellationTokenSource.Token;
-
-        //    _mainDbWorker.SetCancellationToken(ct);
-
-        //    StartProcess(_startDateTime, ct);
-            
-            
-        //    _threadInfoList.ForEach(c => c.ProcessId = _processId);
-        //    foreach (var threadInfo in _threadInfoList)
-        //    {
-        //        StartWork(threadInfo, ct);
-        //    }
-
-        //}
 
         public void CancelWork()
         {
@@ -955,7 +947,7 @@ namespace ServiceCheck.Core
         }
 
 
-        public async void StartWork(ThreadInfo threadInfo, CancellationToken ct, bool testMode)
+        public /*async*/ void StartWork(ThreadInfo threadInfo, CancellationToken ct, bool testMode)
         {
             var progressManager = new ProgressDataManager(_progressReporter);
             progressManager.SetSchedulerProps(threadInfo.ProcessId, threadInfo.Connection);

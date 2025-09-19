@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ServiceCheck.Core</RootNamespace>
     <AssemblyName>ServiceCheck.Core</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
@@ -55,6 +55,7 @@
     <Compile Include="ExportProgressDataLevel.cs" />
     <Compile Include="ExportProgressDataStage.cs" />
     <Compile Include="Logger.cs" />
+    <Compile Include="Progress.cs" />
     <Compile Include="ProgressDataManager.cs" />
     <Compile Include="RepoChangeCommitGroupInfo.cs" />
     <Compile Include="RepoChangeDbSchemaGroupInfo.cs" />
