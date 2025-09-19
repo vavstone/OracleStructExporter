@@ -45,7 +45,7 @@ namespace ServiceCheck.Core
             }
         }
 
-        //TODO доработать для Scheduler
+        [XmlElement]
         public ExportSettingsDetails ExportSettingsDetails { get; set; }
 
         public string UserNameAndDBIdC

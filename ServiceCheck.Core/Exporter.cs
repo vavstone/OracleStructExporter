@@ -327,11 +327,16 @@ namespace ServiceCheck.Core
             List<PartTables> partTables = new List<PartTables>();
 
 
-            var exportSettingsDetails = threadInfo.ExportSettings.ExportSettingsDetails;
+            var exportSettingsDetailsLowPriority = threadInfo.ExportSettings.ExportSettingsDetails;
+            var exportSettingsDetailsHighPriority = threadInfo.Connection.ExportSettingsDetails;
+
+
+            var exportSettingsDetails =
+                ExportSettingsDetails.GetSumExportSettingsDetails(exportSettingsDetailsLowPriority, exportSettingsDetailsHighPriority);
             var settingsConnection = threadInfo.Connection;
             var objectNameMask = exportSettingsDetails.MaskForFileNames?.Include;
             //var outputFolder = threadInfo.ExportSettings.PathToExportDataMain;
-            var objectTypesToProcess = threadInfo.ExportSettings.ExportSettingsDetails.ObjectTypesToProcessC;
+            var objectTypesToProcess = exportSettingsDetails.ObjectTypesToProcessC;
 
             string connectionString = $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)" +
                                       $"(HOST={settingsConnection.Host})(PORT={settingsConnection.Port}))" +
