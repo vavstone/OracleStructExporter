@@ -573,7 +573,7 @@ namespace ServiceCheck.Core
                                             currentObjectNumber, objectType, out canceledByUser);
                                     if (canceledByUser) return;
 
-                                    partTables = dbWorker.GetTablesPartitions(exportSettingsDetails.ExtractOnlyDefPart,
+                                    partTables = dbWorker.GetTablesPartitions(exportSettingsDetails.GetPartitionMode,
                                         ExportProgressDataStage.GET_TABLES_PARTS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
                                         currentObjectNumber, objectType, systemViewInfo, out canceledByUser);

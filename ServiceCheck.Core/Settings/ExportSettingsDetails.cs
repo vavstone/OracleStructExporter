@@ -69,7 +69,7 @@ namespace ServiceCheck.Core
         [XmlAttribute]
         public bool SetSequencesValuesTo1 { get; set; }
         [XmlAttribute]
-        public bool ExtractOnlyDefPart { get; set; }
+        public GetPartitionMode GetPartitionMode { get; set; }
 
     }
 }

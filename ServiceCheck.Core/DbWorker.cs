@@ -919,9 +919,11 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<PartTables> GetTablesPartitions(bool ExtractOnlyDefParts, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
+        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
         {
             var res = new List<PartTables>();
+
+
 
             if (_cancellationToken.IsCancellationRequested)
             {
@@ -935,6 +937,9 @@ namespace ServiceCheck.Core
                 return null;
             }
             canceledByUser = false;
+
+            if (getPartitionMode == GetPartitionMode.NONE)
+                return res;
 
             var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
             progressData.SchemaObjCountPlan = schemaObjCountPlan;
@@ -964,11 +969,14 @@ namespace ServiceCheck.Core
                             if (!reader.IsDBNull(reader.GetOrdinal("partition_count")))
                                 item.PartitionCount = reader.GetInt32(reader.GetOrdinal("partition_count"));
                             if (!reader.IsDBNull(reader.GetOrdinal("def_subpartition_count")))
-                                item.DefSubPartitionCount = reader.GetInt32(reader.GetOrdinal("def_subpartition_count"));
+                                item.DefSubPartitionCount =
+                                    reader.GetInt32(reader.GetOrdinal("def_subpartition_count"));
                             if (!reader.IsDBNull(reader.GetOrdinal("partitioning_key_count")))
-                                item.PartitioningKeyCount = reader.GetInt32(reader.GetOrdinal("partitioning_key_count"));
+                                item.PartitioningKeyCount =
+                                    reader.GetInt32(reader.GetOrdinal("partitioning_key_count"));
                             if (!reader.IsDBNull(reader.GetOrdinal("subpartitioning_key_count")))
-                                item.SubPartitioningKeyCount = reader.GetInt32(reader.GetOrdinal("subpartitioning_key_count"));
+                                item.SubPartitioningKeyCount =
+                                    reader.GetInt32(reader.GetOrdinal("subpartitioning_key_count"));
                             item.DefTableSpaceName = reader["def_tablespace_name"].ToString();
                             if (existsIntervalColumn)
                                 item.Interval = reader["interval"].ToString();
@@ -978,7 +986,9 @@ namespace ServiceCheck.Core
                 }
 
                 //USER_PART_KEY_COLUMNS
-                ddlQuery = @"SELECT name, column_name, column_position FROM USER_PART_KEY_COLUMNS where object_type='TABLE'" + GetAddObjectNameMaskWhere("name", _objectNameMask, false);
+                ddlQuery =
+                    @"SELECT name, column_name, column_position FROM USER_PART_KEY_COLUMNS where object_type='TABLE'" +
+                    GetAddObjectNameMaskWhere("name", _objectNameMask, false);
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -998,7 +1008,9 @@ namespace ServiceCheck.Core
                 }
 
                 //USER_SUBPART_KEY_COLUMNS
-                ddlQuery = @"SELECT name, column_name, column_position FROM USER_SUBPART_KEY_COLUMNS where object_type='TABLE'" + GetAddObjectNameMaskWhere("name", _objectNameMask, false);
+                ddlQuery =
+                    @"SELECT name, column_name, column_position FROM USER_SUBPART_KEY_COLUMNS where object_type='TABLE'" +
+                    GetAddObjectNameMaskWhere("name", _objectNameMask, false);
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1018,8 +1030,11 @@ namespace ServiceCheck.Core
                 }
 
                 //USER_TAB_PARTITIONS
-                var addRestrStr = ExtractOnlyDefParts ? "partition_position=1" : "1=1";
-                ddlQuery = @"SELECT table_name, partition_name, subpartition_count, high_value, partition_position, tablespace_name FROM USER_TAB_PARTITIONS WHERE " + addRestrStr + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
+
+                var addRestrStr = getPartitionMode == GetPartitionMode.ONLYDEFPART ? "partition_position=1" : "1=1";
+                ddlQuery =
+                    @"SELECT table_name, partition_name, subpartition_count, high_value, partition_position, tablespace_name FROM USER_TAB_PARTITIONS WHERE " +
+                    addRestrStr + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1043,8 +1058,10 @@ namespace ServiceCheck.Core
                 }
 
                 //USER_TAB_SUBPARTITIONS
-                addRestrStr = ExtractOnlyDefParts ? "subpartition_position=1" : "1=1";
-                ddlQuery = @"SELECT table_name, partition_name, subpartition_name, high_value, subpartition_position, tablespace_name FROM USER_TAB_SUBPARTITIONS WHERE " + addRestrStr + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
+                addRestrStr = getPartitionMode == GetPartitionMode.ONLYDEFPART ? "subpartition_position=1" : "1=1";
+                ddlQuery =
+                    @"SELECT table_name, partition_name, subpartition_name, high_value, subpartition_position, tablespace_name FROM USER_TAB_SUBPARTITIONS WHERE " +
+                    addRestrStr + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1057,18 +1074,21 @@ namespace ServiceCheck.Core
                             item.SubPartitionName = reader["subpartition_name"].ToString();
                             item.HighValue = reader["high_value"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("subpartition_position")))
-                                item.SubPartitionPosition = reader.GetInt32(reader.GetOrdinal("subpartition_position"));
+                                item.SubPartitionPosition =
+                                    reader.GetInt32(reader.GetOrdinal("subpartition_position"));
                             item.TableSpaceName = reader["tablespace_name"].ToString();
                             var table = res.FirstOrDefault(c => c.TableName == item.TableName);
                             if (table != null)
                             {
-                                var partition = table.Partitions.FirstOrDefault(c => c.PartitionName == item.PartitionName);
+                                var partition =
+                                    table.Partitions.FirstOrDefault(c => c.PartitionName == item.PartitionName);
                                 if (partition != null)
                                     partition.SubPartitions.Add(item);
                             }
                         }
                     }
                 }
+
             }
             catch (Exception e)
             {

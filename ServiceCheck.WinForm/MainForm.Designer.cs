@@ -58,7 +58,6 @@
             this.btnExport = new System.Windows.Forms.Button();
             this.panel3 = new System.Windows.Forms.Panel();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
-            this.cbGetOnlyFirstPart = new System.Windows.Forms.CheckBox();
             this.cbSetSeqValTo1 = new System.Windows.Forms.CheckBox();
             this.label4 = new System.Windows.Forms.Label();
             this.tbNameObjectMaskExclude = new System.Windows.Forms.TextBox();
@@ -79,6 +78,7 @@
             this.cbJobs = new System.Windows.Forms.CheckBox();
             this.cbFunctions = new System.Windows.Forms.CheckBox();
             this.cbDBlinks = new System.Windows.Forms.CheckBox();
+            this.cbGetPartMode = new System.Windows.Forms.ComboBox();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -388,7 +388,7 @@
             // 
             // groupBox2
             // 
-            this.groupBox2.Controls.Add(this.cbGetOnlyFirstPart);
+            this.groupBox2.Controls.Add(this.cbGetPartMode);
             this.groupBox2.Controls.Add(this.cbSetSeqValTo1);
             this.groupBox2.Location = new System.Drawing.Point(402, 12);
             this.groupBox2.Name = "groupBox2";
@@ -396,16 +396,6 @@
             this.groupBox2.TabIndex = 25;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Дополнительно:";
-            // 
-            // cbGetOnlyFirstPart
-            // 
-            this.cbGetOnlyFirstPart.AutoSize = true;
-            this.cbGetOnlyFirstPart.Location = new System.Drawing.Point(15, 42);
-            this.cbGetOnlyFirstPart.Name = "cbGetOnlyFirstPart";
-            this.cbGetOnlyFirstPart.Size = new System.Drawing.Size(259, 17);
-            this.cbGetOnlyFirstPart.TabIndex = 1;
-            this.cbGetOnlyFirstPart.Text = "Брать только первую секцию партиц-х таблиц";
-            this.cbGetOnlyFirstPart.UseVisualStyleBackColor = true;
             // 
             // cbSetSeqValTo1
             // 
@@ -606,6 +596,15 @@
             this.cbDBlinks.Text = "dblinks";
             this.cbDBlinks.UseVisualStyleBackColor = true;
             // 
+            // cbGetPartMode
+            // 
+            this.cbGetPartMode.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cbGetPartMode.FormattingEnabled = true;
+            this.cbGetPartMode.Location = new System.Drawing.Point(15, 43);
+            this.cbGetPartMode.Name = "cbGetPartMode";
+            this.cbGetPartMode.Size = new System.Drawing.Size(318, 21);
+            this.cbGetPartMode.TabIndex = 1;
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -664,7 +663,6 @@
         private System.Windows.Forms.CheckBox cbFunctions;
         private System.Windows.Forms.CheckBox cbDBlinks;
         private System.Windows.Forms.GroupBox groupBox2;
-        private System.Windows.Forms.CheckBox cbGetOnlyFirstPart;
         private System.Windows.Forms.CheckBox cbSetSeqValTo1;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.TextBox tbNameObjectMaskExclude;
@@ -692,6 +690,7 @@
         private System.Windows.Forms.Label lblHost;
         private System.Windows.Forms.Button btCheckNoneConnections;
         private System.Windows.Forms.Button btCheckAllConnections;
+        private System.Windows.Forms.ComboBox cbGetPartMode;
     }
 }
 

@@ -27,7 +27,26 @@ namespace ServiceCheck.WinForm
         {
             txtOutputFolder.Text = settings.ExportSettings.PathToExportDataMain;
             cbSetSeqValTo1.Checked = settings.ExportSettings.ExportSettingsDetails.SetSequencesValuesTo1;
-            cbGetOnlyFirstPart.Checked = settings.ExportSettings.ExportSettingsDetails.ExtractOnlyDefPart;
+            
+            var items = new[]
+            {
+                new { Key = GetPartitionMode.NONE, Text = "Не получать партиции таблиц" },
+                new { Key = GetPartitionMode.ONLYDEFPART, Text = "Получать только партиции таблиц по умолчанию" },
+                new { Key = GetPartitionMode.ALL, Text = "Получать все партиции таблиц" }
+            };
+
+            cbGetPartMode.DataSource = items;
+            cbGetPartMode.DisplayMember = "Text";
+            cbGetPartMode.ValueMember = "Key";
+
+            switch (settings.ExportSettings.ExportSettingsDetails.GetPartitionMode)
+            {
+                case GetPartitionMode.NONE: cbGetPartMode.SelectedIndex = 0; break;
+                case GetPartitionMode.ONLYDEFPART: cbGetPartMode.SelectedIndex = 1; break;
+                case GetPartitionMode.ALL: cbGetPartMode.SelectedIndex = 2; break;
+            }
+
+
             if (settings.ExportSettings.ExportSettingsDetails.MaskForFileNames != null)
             {
                 tbNameObjectMaskInclude.Text = settings.ExportSettings.ExportSettingsDetails.MaskForFileNames.Include;
@@ -101,7 +120,14 @@ namespace ServiceCheck.WinForm
             exportSettingsDetails.ObjectTypesToProcess = objectTypesToProcess.MergeFormatted(string.Empty, ";");
 
             exportSettingsDetails.SetSequencesValuesTo1 = cbSetSeqValTo1.Checked;
-            exportSettingsDetails.ExtractOnlyDefPart = cbGetOnlyFirstPart.Checked;
+
+            switch (cbGetPartMode.SelectedIndex)
+            {
+                case 0: exportSettingsDetails.GetPartitionMode = GetPartitionMode.NONE; break;
+                case 1: exportSettingsDetails.GetPartitionMode = GetPartitionMode.ONLYDEFPART; break;
+                case 2: exportSettingsDetails.GetPartitionMode = GetPartitionMode.ALL; break;
+            }
+
 
             settings.ExportSettings.PathToExportDataMain = txtOutputFolder.Text.Trim();
         }

@@ -31,4 +31,11 @@
         MONTHS,
         YEARS
     }
+
+    public enum GetPartitionMode
+    {
+        NONE,
+        ONLYDEFPART,
+        ALL
+    }
 }
