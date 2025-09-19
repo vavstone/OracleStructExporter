@@ -165,17 +165,6 @@ namespace ServiceCheck.Core
             progressManager.ReportCurrentProgress(progressData2);
         }
 
-        //static void SearchAndDeleteDuplicatesInMainFolder(ThreadInfo thread)
-        //{
-        //    
-        //    //здесь необходимо руководствоваться флагом ClearDuplicatesInMainFolder на уровне общих настроек и перекрывающих флагов на уровне настроек Connection, а также при сравнении папок исключать из списка сравниваемых файлы из блока FilesToExcludeFromCheckingOnDoubles
-        //}
-
-        //static void CopyFilesToSimpleFileRepoFolder(ThreadInfo thread)
-        //{
-        //    var targetFolder = Path.Combine(thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo)
-        //}
-
         void CreateSimpleRepoCommit(ThreadInfo thread, ProgressDataManager progressManager)
         {
             var progressData = new ExportProgressData(
@@ -210,16 +199,6 @@ namespace ServiceCheck.Core
             progressManager.ReportCurrentProgress(progressData2);
         }
 
-        static void CopyFilesToGitLabRepoFolder(ThreadInfo thread)
-        {
-            //TODO
-        }
-
-        static void CreateAndSendCommitToGitLab(ThreadInfo thread)
-        {
-            //TODO
-        }
-
         static string getExtensionForObjectType(string objectType, bool packageHasHeader, bool packageHasBody)
         {
             if (objectType == "PACKAGES")
@@ -246,24 +225,6 @@ namespace ServiceCheck.Core
                 default: return ".sql";
             }
         }
-
-        //public async void StartWork(ThreadInfo threadInfo)
-        //{
-        //    // Если задача уже выполняется
-        //    if (_cancellationTokenSource != null)
-        //        throw new Exception("Задача уже выполняется");
-        //    try
-        //    {
-        //        _cancellationTokenSource = new CancellationTokenSource();
-        //        var ct = _cancellationTokenSource.Token;
-        //        await Task.Run(() => StartWork(threadInfo, ct), ct);
-        //    }
-        //    finally
-        //    {
-        //        _cancellationTokenSource?.Dispose();
-        //        _cancellationTokenSource = null;
-        //    }
-        //}
 
         public void SetSettings(OSESettings settings)
         {
@@ -300,14 +261,6 @@ namespace ServiceCheck.Core
             StartProcess(_startDateTime, connToProcessInfo /*, ct*/);
             _threadInfoList.ForEach(c => c.ProcessId = _processId);
 
-
-            //foreach (var threadInfo in _threadInfoList)
-            //{
-            //    if (isAsyncMode)
-            //        Task.Run(() => StartWork(threadInfo, ct, testMode), ct);
-            //    else
-            //        StartWork(threadInfo, ct, testMode);
-            //}
 
             if (isAsyncMode)
             {
@@ -362,10 +315,7 @@ namespace ServiceCheck.Core
             schemaObjectsCountFact = 0;
 
             var currentObjectNumber = 0;
-            //var currentObjectName = string.Empty;
-            //var currentObjectTypes = string.Empty;
             bool canceledByUser;
-            //var currentTime = DateTime.Now;
 
             List<TableOrViewComment> tablesComments = new List<TableOrViewComment>();
             List<TableOrViewComment> viewsComments = new List<TableOrViewComment>();
@@ -387,18 +337,6 @@ namespace ServiceCheck.Core
                                       $"(HOST={settingsConnection.Host})(PORT={settingsConnection.Port}))" +
                                       $"(CONNECT_DATA=(SID={settingsConnection.SID})));" +
                                       $"User Id={settingsConnection.UserName};Password={settingsConnection.PasswordC};";
-
-
-            //var currentSchemaDescr =
-            //    $"{settingsConnection.UserName}@{settingsConnection.Host}:{settingsConnection.Port}/{settingsConnection.SID}";
-
-            //if (ct.IsCancellationRequested)
-            //{
-            //    progressManager.ReportCurrentProgress(ExportProgressDataLevel.CANCEL,
-            //        ExportProgressDataStage.UNPLANNED_EXIT, null, 0,
-            //        0, null, 0, null, null);
-            //    return;
-            //}
 
             var progressDataForSchema = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStage.PROCESS_SCHEMA);
             progressManager.ReportCurrentProgress(progressDataForSchema);
@@ -437,8 +375,6 @@ namespace ServiceCheck.Core
                             "USER_TAB_PARTITIONS",
                             "USER_TAB_SUBPARTITIONS"
                         };
-
-
 
                         var systemViewInfo = dbWorker.GetInfoAboutSystemViews(systemViewsToCheck,
                             ExportProgressDataStage.GET_INFO_ABOUT_SYS_VIEW, out canceledByUser);
@@ -689,10 +625,8 @@ namespace ServiceCheck.Core
                                     bool currentObjIsSchedulerJob = false;
                                     bool currentObjIsDBMSJob = false;
 
-
                                     try
                                     {
-
 
                                         var progressDataForObject = new ExportProgressData(
                                             ExportProgressDataLevel.STAGESTARTINFO,
@@ -830,8 +764,6 @@ namespace ServiceCheck.Core
 
                                         SaveObjectToFile(threadInfo, objectName, objectTypeSubdirName, ddl, extension);
 
-
-
                                         //currentObjectName = string.Empty;
 
                                     }
@@ -862,8 +794,6 @@ namespace ServiceCheck.Core
                                     progressDataForObject2.ObjectName = objectName;
                                     progressManager.ReportCurrentProgress(progressDataForObject2);
                                 }
-
-
 
                             }
                             catch (Exception ex)
@@ -904,7 +834,6 @@ namespace ServiceCheck.Core
                     }
 
                 }
-
                 //if (!threadInfo.ExportSettings.WriteOnlyToMainDataFolder)
                 if (_settings.IsScheduler)
                 {
@@ -923,15 +852,15 @@ namespace ServiceCheck.Core
                         CreateSimpleRepoCommit(threadInfo, progressManager);
                     }
 
-                    if (_settings.SchedulerSettings.RepoSettings.GitLabRepo != null &&
-                        _settings.SchedulerSettings.RepoSettings.GitLabRepo.CommitToRepoAfterSuccess &&
-                        progressManager.CurrentThreadErrorsCount == 0)
-                    {
-                        //TODO копирование сформированных данным экспортом файлов из папки PathToExportDataMain в папку PathToExportDataForRepo (если задано настройками)
-                        CopyFilesToGitLabRepoFolder(threadInfo);
-                        //TODO создание коммита
-                        CreateAndSendCommitToGitLab(threadInfo);
-                    }
+                    //if (_settings.SchedulerSettings.RepoSettings.GitLabRepo != null &&
+                    //    _settings.SchedulerSettings.RepoSettings.GitLabRepo.CommitToRepoAfterSuccess &&
+                    //    progressManager.CurrentThreadErrorsCount == 0)
+                    //{
+                    //    //TODO копирование сформированных данным экспортом файлов из папки PathToExportDataMain в папку PathToExportDataForRepo (если задано настройками)
+                    //    CopyFilesToGitLabRepoFolder(threadInfo);
+                    //    //TODO создание коммита
+                    //    CreateAndSendCommitToGitLab(threadInfo);
+                    //}
                 }
 
             }
@@ -1016,22 +945,9 @@ namespace ServiceCheck.Core
 
         public void EndProcess(string dbLogPrefix, ExportProgressData progressData)
         {
-            //if (_settings.LogSettings.DBLog.Enabled)
-            //{
             _mainDbWorker.UpdateProcessInDBLog(DateTime.Now, dbLogPrefix, progressData);
-            //}
         }
 
-        //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
-        //{
-        //    return _mainDbWorker.GetLastSuccessExportForSchema(dbidC, username);
-        //}
-
-        //public List<SchemaWorkAggrStat> GetAggrStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
-        //{
-        //    var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
-        //    return SchemaWorkAggrStat.GetAggrStat(plainStat, scheduledConnections);
-        //}
 
         public List<SchemaWorkAggrFullStat> GetAggrFullStat(List<ConnectionToProcess> scheduledConnections, int getStatForLastDays, string prefix)
         {
@@ -1040,23 +956,6 @@ namespace ServiceCheck.Core
             var commitStat = _mainDbWorker.GetCommitStat(getStatForLastDays, prefix);
             return SchemaWorkAggrFullStat.GetAggrFullStat(plainStat, appWorkStat, commitStat, scheduledConnections, getStatForLastDays);
         }
-
-        //public static List<ConnectionToProcess> SelectConnectionsToProcess(List<SchemaWorkAggrFullStat> statInfo, int maxConnectPerOneProcess)
-        //{
-        //    var maxConPerProcess = maxConnectPerOneProcess;
-        //    var res = new List<ConnectionToProcess>();
-        //    foreach (var stat in statInfo.Where(c=>c.IsScheduled).Take(maxConPerProcess))
-        //    {
-        //        res.Add(new ConnectionToProcess
-        //        {
-        //            DbId = stat.DBId,
-        //            UserName = stat.UserName,
-        //            Enabled = true,
-        //            OneSuccessResultPerHours = stat.OneTimePerHoursPlan??0
-        //        });
-        //    }
-        //    return res;
-        //}
 
         static PrognozBySchema getStatForSchema(List<SchemaWorkAggrFullStat> statInfo, string dbid, string userName,
             int minSuccessResultsForPrognoz, int? intervalForSearch)
@@ -1101,7 +1000,6 @@ namespace ServiceCheck.Core
         {
             var res = new List<PrognozBySchema>();
 
-            
             var connToProcess = new List<SchemaWorkAggrFullStat>();
             foreach (var stat in statInfo)
             {

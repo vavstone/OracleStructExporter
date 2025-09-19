@@ -363,12 +363,12 @@ namespace ServiceCheck.Core
                         return $"Создание коммита в локальной файловой СКВ...";
                     return $"Коммит в локальной файловой СКВ создан ({MetaObjCountFact} изменений) {DurationString}";
                 }
-                if (Stage == ExportProgressDataStage.CREATE_AND_SEND_GITLAB_COMMIT)
-                {
-                    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Создание и отправка commit в git...";
-                    return $"Commit создан и отправлен в git{DurationString}";
-                }
+                //if (Stage == ExportProgressDataStage.CREATE_AND_SEND_GITLAB_COMMIT)
+                //{
+                //    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
+                //        return $"Создание и отправка commit в git...";
+                //    return $"Commit создан и отправлен в git{DurationString}";
+                //}
 
                 return GetTextAddInfo(null);
             }
