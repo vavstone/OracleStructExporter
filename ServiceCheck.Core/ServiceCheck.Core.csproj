@@ -81,7 +81,11 @@
     <Compile Include="OracleLikeStringComparer.cs" />
     <Compile Include="DBStructs\PartOrSubPartKeyColumns.cs" />
     <Compile Include="PrognozBySchema.cs" />
+    <Compile Include="Settings\ConnectionForIgnoreDiff.cs" />
+    <Compile Include="Settings\FileForIgnoreDiff.cs" />
     <Compile Include="Settings\GitLabRepo.cs" />
+    <Compile Include="Settings\IgnoreDifferences.cs" />
+    <Compile Include="Settings\LineRuleForIgnoreDiff.cs" />
     <Compile Include="Settings\WinAppSettings.cs" />
     <Compile Include="Settings\SimpleFileRepo.cs" />
     <Compile Include="Settings\LogType.cs" />

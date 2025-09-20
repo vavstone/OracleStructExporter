@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ServiceCheck.Core.Settings;
 
 namespace ServiceCheck.Core
 {
@@ -123,7 +124,7 @@ namespace ServiceCheck.Core
         }
 
         public void CreateCommit(string inputFolder, string dbSubfolder, string userNameSubfolder, string vcsFolder,
-            int processId, DateTime commitDate, out int changesCount, out List<RepoChangeItem> repoChanges)
+            int processId, DateTime commitDate, IgnoreDifferences ignoreDifferences, out int changesCount, out List<RepoChangeItem> repoChanges)
         {
             var repo = $"{dbSubfolder}\\{userNameSubfolder}";
             changesCount = 0;
@@ -159,7 +160,7 @@ namespace ServiceCheck.Core
                 // Сравнение и создание дельты
                 string tmpDeltaPath = Path.Combine(currentCommitTmpDir, "new", repo);
                 FilesManager.DeleteDirectory(tmpDeltaPath);
-                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, out repoChanges);
+                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, ignoreDifferences, out repoChanges);
 
                 if (repoChanges.Any())
                 {
@@ -234,7 +235,7 @@ namespace ServiceCheck.Core
             return filesCounter;
         }
 
-        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, out List<RepoChangeItem> repoChanges)
+        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, IgnoreDifferences ignoreDifferences, out List<RepoChangeItem> repoChanges)
         {
             repoChanges = new List<RepoChangeItem>();
 
@@ -247,16 +248,17 @@ namespace ServiceCheck.Core
                 string relativePath = file.Substring(inputPath.Length + 1);
                 string prevFile = Path.Combine(previousPath, relativePath);
                 string deltaFile = Path.Combine(deltaPath, relativePath);
-
+                var fileName = Path.GetFileName(file);
                 var currentFileFolder = FilesManager.GetCurrentFolderName(file);
 
-                if (!File.Exists(prevFile) || !FilesAreEqual(file, prevFile))
+                if (!File.Exists(prevFile) || !FilesAreEqual(file, prevFile, 
+                        dbSubfolder,  userNameSubfolder, currentFileFolder, fileName, ignoreDifferences))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
                     File.Copy(file, deltaFile);
                     var addOrUpdItem = new RepoChangeItem
                     {
-                        FileName = Path.GetFileName(file), DBId = dbSubfolder, UserName = userNameSubfolder,
+                        FileName = fileName, DBId = dbSubfolder, UserName = userNameSubfolder,
                         ProcessId = processId, CommitCommonDate = commitDate,
                         ObjectType = GetOracleObjTypeByFolderName(currentFileFolder),
                         IsInitial = false,
@@ -309,9 +311,62 @@ namespace ServiceCheck.Core
             }
         }
 
-        private bool FilesAreEqual(string path1, string path2)
+        private bool FilesAreEqual(string path1, string path2, string dbId, string userName, string folderName, string fileName, IgnoreDifferences ignoreDifferences)
         {
-            return File.ReadAllBytes(path1).SequenceEqual(File.ReadAllBytes(path2));
+            var filesContentEqual = File.ReadAllBytes(path1).SequenceEqual(File.ReadAllBytes(path2));
+            if (filesContentEqual)
+                return true;
+            
+            if (ignoreDifferences != null)
+            {
+                //если файлы не идентичны, но в конфигурации есть настройка игнора, пробуем использовать шанс
+                var connForIgnore = ignoreDifferences.ConnectionsForIgnoreDiff.FirstOrDefault(c =>
+                    c.DbId.ToUpper() == dbId.ToUpper() && c.UserName.ToUpper() == userName.ToUpper());
+                if (connForIgnore != null)
+                {
+                    var filesToIgnore = connForIgnore.FilesForIgnoreDiff.Where(c =>
+                        (c.FolderName=="*" || c.FolderName.ToUpper() == folderName.ToUpper()) 
+                        && (c.FileName=="*" || c.FileName.ToUpper() == fileName.ToUpper())).ToList();
+                    if (filesToIgnore.Any())
+                    {
+                        var file1Lines = new List<string>(File.ReadAllLines(path1));
+                        var file2Lines = new List<string>(File.ReadAllLines(path2));
+                        
+                        //если будут реализованы другие правила, кроме LineRulesForIgnoreDiff, то доработать это условие
+                        if (file1Lines.Count != file2Lines.Count) return false;
+
+                        var lineRules = filesToIgnore.SelectMany(c => c.LineRulesForIgnoreDiff).ToList();
+                        if (lineRules.Any())
+                        {
+                            for (int i = 0; i < file1Lines.Count; i++)
+                            {
+                                var file1Line = file1Lines[i];
+                                var file2Line = file2Lines[i];
+                                if (file1Line == file2Line) continue;
+                                var maskInLineFound = false;
+                                foreach (var lineRuleForIgnoreDiff in lineRules)
+                                {
+                                    var maskParts = lineRuleForIgnoreDiff.StaticMask.Split(new []{"{!!!VARIABLE_VALUE!!!}"}, StringSplitOptions.None);
+                                    var file1LineTmp = lineRuleForIgnoreDiff.TrimEmptySpacesBeforeAndAfter
+                                        ? file1Line.Trim()
+                                        : file1Line;
+                                    var file2LineTmp = lineRuleForIgnoreDiff.TrimEmptySpacesBeforeAndAfter
+                                        ? file2Line.Trim()
+                                        : file2Line;
+                                    if ((!string.IsNullOrWhiteSpace(maskParts[0]) && 
+                                         (!file1LineTmp.StartsWith(maskParts[0]) || !file2LineTmp.StartsWith(maskParts[0]))) ||
+                                        (!string.IsNullOrWhiteSpace(maskParts[1]) &&
+                                         (!file1LineTmp.EndsWith(maskParts[1]) || !file2LineTmp.EndsWith(maskParts[1])))) continue;
+                                    maskInLineFound = true;
+                                    break;
+                                }
+                                if (!maskInLineFound) return false;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         //private void CopyDirectory(string sourceDir, string destDir, out int filesCount)
