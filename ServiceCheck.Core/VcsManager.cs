@@ -251,6 +251,35 @@ namespace ServiceCheck.Core
             SaveCommitShortInfoList(commitShortInfoList, commitsJournalFileFullName);
         }
 
+        /// <summary>
+        /// Список в формате DBId/UserName
+        /// </summary>
+        /// <param name="repoFolder"></param>
+        /// <returns></returns>
+        public static List<string> GetDBAndUserNameListFromRepoFolder(string repoFolder)
+        {
+            var res = new List<string>();
+            if (string.IsNullOrWhiteSpace(repoFolder)) return res;
+            //считаем, что в initial должны быть все варианты, ищем только там
+            var pathToInitial = Path.Combine(repoFolder, "initial");
+            if (!Directory.Exists(pathToInitial))
+                return res;
+            foreach (var commitFolder in Directory.GetDirectories(pathToInitial))
+            {
+                foreach (var dbFolder in Directory.GetDirectories(commitFolder))
+                {
+                    foreach (var userFolder in Directory.GetDirectories(dbFolder))
+                    {
+                        if (Directory.GetFiles(userFolder, "*", SearchOption.AllDirectories).Any())
+                        {
+                            res.Add($"{Path.GetFileName(dbFolder)}\\{Path.GetFileName(userFolder)}");
+                        }
+                    }
+                }
+            }
+            return res;
+        }
+
         public static void SaveCommitShortInfoList(List<CommitShortInfo> shortInfoList, string fileName)
         {
             var data = new List<List<string>>();

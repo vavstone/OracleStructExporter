@@ -13,6 +13,8 @@ namespace ServiceCheck.Core
         public int? PrefixLength { get; set; }
         public string Logging { get; set; }
         public string Locality { get; set; }
+        public string ItypOwner { get; set; }
+        public string ItypName { get; set; }
         public List<IndexColumnStruct> IndexColumnStructs { get; set; } = new List<IndexColumnStruct>();
         //public List<string> IndexExpressions { get; set; } = new List<string>();
 

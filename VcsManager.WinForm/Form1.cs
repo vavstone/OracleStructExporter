@@ -51,7 +51,7 @@ namespace VcsManager.WinForm
             if (DateTime.TryParse(txtCommitDate, out DateTime tmpDate))
                 commitDate = tmpDate;
 
-            var connToProcess = repoName.Split(new []{";"}, StringSplitOptions.RemoveEmptyEntries);
+            var connToProcess = repoName.Split(new []{";",Environment.NewLine}, StringSplitOptions.RemoveEmptyEntries);
             foreach (var conn in connToProcess)
             {
                 var outFolderForRepo = Path.Combine(outFolder, conn);
@@ -63,6 +63,17 @@ namespace VcsManager.WinForm
                 ServiceCheck.Core.VcsManager.SaveCommitShortInfoList(commitShortInfoList, commitsJournalFileFullName);
             }
             MessageBox.Show("Готово!");
+        }
+
+        private void btTab1FillRepoList_Click(object sender, EventArgs e)
+        {
+            var repoFolder = txtTab1VcsFolder.Text;
+            var repoList = ServiceCheck.Core.VcsManager.GetDBAndUserNameListFromRepoFolder(repoFolder).OrderBy(c => c);
+            txtTab1RepoList.Text = "";
+            foreach (var repoItem in repoList)
+            {
+                txtTab1RepoList.Text += repoItem + Environment.NewLine;
+            }
         }
     }
 }

@@ -702,11 +702,13 @@ namespace ServiceCheck.Core
                 {
                     case "NORMAL":
                     case "FUNCTION-BASED NORMAL":
+                    case "DOMAIN":
                         idxAddStr = "";
                         break;
                     case "FUNCTION-BASED BITMAP":
                         idxAddStr = "bitmap ";
                         break;
+
                     default:
                         idxAddStr = index.IndexType.ToLower() + " ";
                         break;
@@ -714,10 +716,17 @@ namespace ServiceCheck.Core
 
                 sb.Append(
                     $"create {uniqueAddStr}{idxAddStr}index {index.IndexName.ToUpper()} on {objectNameUpper} {columns_str}");
-                if (index.Compression == "ENABLED" || index.Logging != "YES" || index.Locality == "LOCAL")
+                if (index.IndexType == "DOMAIN" || 
+                    index.Compression == "ENABLED" || 
+                    index.Logging != "YES" || 
+                    index.Locality == "LOCAL")
                 {
                     sb.AppendLine();
                     sb.Append("  ");
+                    if (index.IndexType == "DOMAIN")
+                    {
+                        sb.Append($"indextype is {index.ItypOwner}.{index.ItypName}");
+                    }
                     if (index.Compression == "ENABLED")
                     {
                         sb.Append("compress");
@@ -762,6 +771,11 @@ namespace ServiceCheck.Core
                 sb.Append("  add");
                 sb.Append(GetContstraintText(constraint, tablesConstraints, schemaName));
                 sb.Append(";");
+                if (constraint.BindedIndexStruct != null && constraint.BindedIndexStruct.Logging == "NO")
+                {
+                    sb.AppendLine();
+                    sb.Append($"alter index {constraint.ConstraintName} nologging;");
+                }
             }
 
             if (addSlashTo.Contains("TABLES"))

@@ -1400,7 +1400,7 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = @"SELECT i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality 
+                string ddlQuery = @"SELECT i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality, i.ityp_owner, i.ityp_name  
             from USER_INDEXES i 
             LEFT JOIN USER_PART_INDEXES p ON i.TABLE_NAME=p.table_name and i.INDEX_NAME = p.INDEX_NAME
             WHERE i.TABLE_TYPE='TABLE' and i.table_owner=:schemaName" + GetAddObjectNameMaskWhere("i.table_name", _objectNameMask, false);
@@ -1421,6 +1421,8 @@ namespace ServiceCheck.Core
                                 item.PrefixLength = reader.GetInt32(reader.GetOrdinal("prefix_length"));
                             item.Logging = reader["logging"].ToString();
                             item.Locality = reader["locality"].ToString();
+                            item.ItypOwner = reader["ityp_owner"].ToString();
+                            item.ItypName = reader["ityp_name"].ToString();
                             res.Add(item);
                         }
                     }

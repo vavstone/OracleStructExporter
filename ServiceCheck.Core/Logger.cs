@@ -293,199 +293,6 @@ namespace ServiceCheck.Core
 
         }
 
-        //public string GetStatInfo(List<SchemaWorkAggrStat> statList, string tableTitle)
-        //{
-        //    if (statList.Any())
-        //    {
-        //        var dataList = new List<List<string>>();
-        //        var columnSettings = new List<ColumnSettings>();
-        //        columnSettings.Add(new ColumnSettings { Header = "БД", Alignment = TextAlignment.Left, MaxWidth = 30, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Схема", Alignment = TextAlignment.Left, MaxWidth = 30, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "План", Alignment = TextAlignment.Center, MaxWidth = 7, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Время до планового запуска", Alignment = TextAlignment.Right, MaxWidth = 22, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Раз в X часов, план", Alignment = TextAlignment.Right, MaxWidth = 10, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Раз в X часов, факт", Alignment = TextAlignment.Right, MaxWidth = 10, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Последний успешный запуск", Alignment = TextAlignment.Center, MaxWidth = 19, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Кол-во успешных запусков", Alignment = TextAlignment.Right, MaxWidth = 10, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Последний неусп-ый запуск", Alignment = TextAlignment.Center, MaxWidth = 19, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Кол-во неусп-ых запусков", Alignment = TextAlignment.Right, MaxWidth = 10, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Среднее время (мин)", Alignment = TextAlignment.Right, MaxWidth = 8, Padding = 0 });
-        //        columnSettings.Add(new ColumnSettings { Header = "Средний объем", Alignment = TextAlignment.Right, MaxWidth = 8, Padding = 0 });
-        //        foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch??TimeSpan.MaxValue))
-        //        {
-        //            var dataRow = new List<string>();
-        //            dataRow.Add(statItem.DBId);
-        //            dataRow.Add(statItem.UserName);
-        //            dataRow.Add(statItem.IsScheduled ? "да" : "нет");
-        //            dataRow.Add(statItem.TimeBeforePlanLaunch == null ? string.Empty : statItem.TimeBeforePlanLaunch.Value.ToStringFormat(false));
-        //            dataRow.Add(statItem.OneTimePerHoursPlan == null ? string.Empty : statItem.OneTimePerHoursPlan.Value.ToString());
-        //            dataRow.Add(statItem.OneTimePerHoursFact == null ? string.Empty : statItem.OneTimePerHoursFact.Value.ToStringFormat(1));
-        //            dataRow.Add(statItem.LastSuccessLaunchFactTime == null ? string.Empty : statItem.LastSuccessLaunchFactTime.Value.ToString("yyyy.MM.dd HH:mm:ss"));
-        //            dataRow.Add(statItem.SuccessLaunchesCount.ToString());
-        //            dataRow.Add(statItem.LastErrorLaunchFactTime == null ? string.Empty : statItem.LastErrorLaunchFactTime.Value.ToString("yyyy.MM.dd HH:mm:ss"));
-        //            dataRow.Add(statItem.ErrorLaunchesCount.ToString());
-        //            dataRow.Add(statItem.AvgSuccessLaunchDurationInMinutes == null ? string.Empty : statItem.AvgSuccessLaunchDurationInMinutes.Value.ToStringFormat(1));
-        //            dataRow.Add(statItem.AvgSuccessLaunchObjectsFactCount == null ? string.Empty : statItem.AvgSuccessLaunchObjectsFactCount.Value.ToStringFormat(0));
-        //            dataList.Add(dataRow);
-        //        }
-
-        //        var textTableBuilder = new TextTableBuilder();
-        //        return textTableBuilder.BuildTable(dataList, columnSettings, true, tableTitle);
-        //    }
-        //    return "Нет заданий и статистики";
-        //}
-
-        //public string GetStatInfo(List<SchemaWorkAggrStat> statList, int lastDaysToAnalyz)
-        //{
-        //    if (statList.Any())
-        //    {
-        //        var table = new TableBuilder.TableBuilder();
-        //        var columns = new List<Column>();
-        //        table.Columns = columns;
-
-        //        columns.AddRange(new[]
-        //        {
-        //            new Column {Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left},
-        //            new Column {Id = "username", MaxWidth = 30, Alignment = Alignment.Left},
-        //            new Column {Id = "plan", MaxWidth = 7, Alignment = Alignment.Center},
-        //            new Column {Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right},
-        //            new Column {Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right},
-        //            new Column {Id = "oneinhoursfact", MaxWidth = 10, Alignment = Alignment.Right},
-        //            new Column {Id = "lastsuccess", MaxWidth = 16, Alignment = Alignment.Center},
-        //            new Column {Id = "succsesscount", MaxWidth = 10, Alignment = Alignment.Right},
-        //            new Column {Id = "lasterror", MaxWidth = 16, Alignment = Alignment.Center},
-        //            new Column {Id = "errorscount", MaxWidth = 10, Alignment = Alignment.Right},
-        //            new Column {Id = "avgtime", MaxWidth = 9, Alignment = Alignment.Right},
-        //            new Column {Id = "avgsize", MaxWidth = 9, Alignment = Alignment.Right}
-        //        });
-
-        //        var headerRows = new List<List<HeaderCell>>();
-        //        table.HeaderRows = headerRows;
-
-        //        headerRows.Add(new List<HeaderCell>
-        //        {
-        //            new HeaderCell
-        //                {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 12}
-        //        });
-
-        //        headerRows.Add(new List<HeaderCell>
-        //        {
-        //            new HeaderCell {Content = "БД", ColumnId = "dbid", RowSpan = 2},
-        //            new HeaderCell {Content = "Схема", ColumnId = "username", RowSpan = 2},
-        //            new HeaderCell {Content = "План", ColumnId = "plan", RowSpan = 2},
-        //            new HeaderCell {Content = "Время до планового запуска", ColumnId = "timebeforeplan", RowSpan = 2},
-        //            new HeaderCell {Content = "Раз в X часов", ColumnId = "oneinhoursplan", ColSpan = 2},
-        //            new HeaderCell {Content = "Успешные запуски", ColumnId = "lastsuccess", ColSpan = 2},
-        //            new HeaderCell {Content = "Неуспешные запуски", ColumnId = "lasterror", ColSpan = 2},
-        //            new HeaderCell {Content = "Среднее время (мин)", ColumnId = "avgtime", RowSpan = 2},
-        //            new HeaderCell {Content = "Средний объем", ColumnId = "avgsize", RowSpan = 2}
-        //        });
-
-
-        //        headerRows.Add(new List<HeaderCell>
-        //        {
-
-        //            new HeaderCell {Content = "план", ColumnId = "oneinhoursplan"},
-        //            new HeaderCell {Content = "факт", ColumnId = "oneinhoursfact"},
-        //            new HeaderCell {Content = "последний", ColumnId = "lastsuccess"},
-        //            new HeaderCell {Content = "кол-во", ColumnId = "succsesscount"},
-        //            new HeaderCell {Content = "последний", ColumnId = "lasterror"},
-        //            new HeaderCell {Content = "кол-во", ColumnId = "errorscount"}
-
-        //        });
-
-        //        var dataRows = new List<List<DataCell>>();
-        //        table.DataRows = dataRows;
-
-        //        foreach (var statItem in statList.OrderBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MaxValue))
-        //        {
-        //            var dataRow = new List<DataCell>
-        //            {
-        //                new DataCell
-        //                {
-        //                    Content = statItem.DBId,
-        //                    ColumnId = "dbid"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.UserName,
-        //                    ColumnId = "username"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.IsScheduled ? "да" : "нет",
-        //                    ColumnId = "plan"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.TimeBeforePlanLaunch == null
-        //                        ? string.Empty
-        //                        : statItem.TimeBeforePlanLaunch.Value.ToStringFormat(false),
-        //                    ColumnId = "timebeforeplan"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.OneTimePerHoursPlan == null
-        //                        ? string.Empty
-        //                        : statItem.OneTimePerHoursPlan.Value.ToString(),
-        //                    ColumnId = "oneinhoursplan"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.OneTimePerHoursFact == null
-        //                        ? string.Empty
-        //                        : statItem.OneTimePerHoursFact.Value.ToStringFormat(1),
-        //                    ColumnId = "oneinhoursfact"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.LastSuccessLaunchFactTime == null
-        //                        ? string.Empty
-        //                        : statItem.LastSuccessLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
-        //                    ColumnId = "lastsuccess"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.SuccessLaunchesCount.ToString(),
-        //                    ColumnId = "succsesscount"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.LastErrorLaunchFactTime == null
-        //                        ? string.Empty
-        //                        : statItem.LastErrorLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
-        //                    ColumnId = "lasterror"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.ErrorLaunchesCount.ToString(),
-        //                    ColumnId = "errorscount"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.AvgSuccessLaunchDurationInMinutes == null
-        //                        ? string.Empty
-        //                        : statItem.AvgSuccessLaunchDurationInMinutes.Value.ToStringFormat(1),
-        //                    ColumnId = "avgtime"
-        //                },
-        //                new DataCell
-        //                {
-        //                    Content = statItem.AvgSuccessLaunchObjectsFactCount == null
-        //                        ? string.Empty
-        //                        : statItem.AvgSuccessLaunchObjectsFactCount.Value.ToStringFormat(0),
-        //                    ColumnId = "avgsize"
-        //                }
-        //            };
-        //            dataRows.Add(dataRow);
-        //        }
-
-        //        string result = table.ToString();
-        //        return result;
-        //    }
-
-        //    return "Нет заданий и статистики";
-        //}
-
         public string GetStatInfoV2(List<SchemaWorkAggrFullStat> statList, int lastDaysToAnalyz)
         {
             if (statList.Any())
@@ -593,7 +400,7 @@ namespace ServiceCheck.Core
                         {
                             Content = statItem.LastSuccessLaunchFactTime == null
                                 ? string.Empty
-                                : statItem.LastSuccessLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+                                : statItem.LastSuccessLaunchFactTime.Value.ToString("dd.MM.yy HH:mm"),
                             ColumnId = "lastsuccess"
                         },
                         new DataCell
@@ -605,7 +412,7 @@ namespace ServiceCheck.Core
                         {
                             Content = statItem.LastErrorLaunchFactTime == null
                                 ? string.Empty
-                                : statItem.LastErrorLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+                                : statItem.LastErrorLaunchFactTime.Value.ToString("dd.MM.yy HH:mm"),
                             ColumnId = "lasterror"
                         },
                         new DataCell
@@ -847,7 +654,7 @@ namespace ServiceCheck.Core
                         {
                             Content = statItem.LastSuccessLaunchFactTime == null
                                 ? string.Empty
-                                : statItem.LastSuccessLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+                                : statItem.LastSuccessLaunchFactTime.Value.ToString("dd.MM.yy HH:mm"),
                             ColumnId = "lastsuccess"
                         },
                         new DataCell
@@ -874,7 +681,7 @@ namespace ServiceCheck.Core
                         {
                             Content = statItem.LastErrorLaunchFactTime == null
                                 ? string.Empty
-                                : statItem.LastErrorLaunchFactTime.Value.ToString("yy.MM.dd HH:mm"),
+                                : statItem.LastErrorLaunchFactTime.Value.ToString("dd.MM.yy HH:mm"),
                             ColumnId = "lasterror"
                         },
                         new DataCell
