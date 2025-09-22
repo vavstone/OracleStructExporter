@@ -58,6 +58,7 @@
             this.btnExport = new System.Windows.Forms.Button();
             this.panel3 = new System.Windows.Forms.Panel();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.cbGetPartMode = new System.Windows.Forms.ComboBox();
             this.cbSetSeqValTo1 = new System.Windows.Forms.CheckBox();
             this.label4 = new System.Windows.Forms.Label();
             this.tbNameObjectMaskExclude = new System.Windows.Forms.TextBox();
@@ -78,7 +79,6 @@
             this.cbJobs = new System.Windows.Forms.CheckBox();
             this.cbFunctions = new System.Windows.Forms.CheckBox();
             this.cbDBlinks = new System.Windows.Forms.CheckBox();
-            this.cbGetPartMode = new System.Windows.Forms.ComboBox();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -397,6 +397,15 @@
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Дополнительно:";
             // 
+            // cbGetPartMode
+            // 
+            this.cbGetPartMode.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cbGetPartMode.FormattingEnabled = true;
+            this.cbGetPartMode.Location = new System.Drawing.Point(15, 43);
+            this.cbGetPartMode.Name = "cbGetPartMode";
+            this.cbGetPartMode.Size = new System.Drawing.Size(318, 21);
+            this.cbGetPartMode.TabIndex = 1;
+            // 
             // cbSetSeqValTo1
             // 
             this.cbSetSeqValTo1.AutoSize = true;
@@ -420,7 +429,6 @@
             // 
             this.tbNameObjectMaskExclude.Location = new System.Drawing.Point(150, 201);
             this.tbNameObjectMaskExclude.Name = "tbNameObjectMaskExclude";
-            this.tbNameObjectMaskExclude.ReadOnly = true;
             this.tbNameObjectMaskExclude.Size = new System.Drawing.Size(604, 20);
             this.tbNameObjectMaskExclude.TabIndex = 31;
             // 
@@ -595,15 +603,6 @@
             this.cbDBlinks.TabIndex = 0;
             this.cbDBlinks.Text = "dblinks";
             this.cbDBlinks.UseVisualStyleBackColor = true;
-            // 
-            // cbGetPartMode
-            // 
-            this.cbGetPartMode.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbGetPartMode.FormattingEnabled = true;
-            this.cbGetPartMode.Location = new System.Drawing.Point(15, 43);
-            this.cbGetPartMode.Name = "cbGetPartMode";
-            this.cbGetPartMode.Size = new System.Drawing.Size(318, 21);
-            this.cbGetPartMode.TabIndex = 1;
             // 
             // MainForm
             // 

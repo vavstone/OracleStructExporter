@@ -46,6 +46,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CommitShortInfo.cs" />
+    <Compile Include="CSVWorker.cs" />
     <Compile Include="DBStructs\DBMSJob.cs" />
     <Compile Include="DBStructs\SchedulerJobArgument.cs" />
     <Compile Include="DBStructs\SchedulerJob.cs" />

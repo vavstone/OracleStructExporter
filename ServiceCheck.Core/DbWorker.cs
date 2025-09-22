@@ -16,10 +16,10 @@ namespace ServiceCheck.Core
         public string ConnectionString { get; private set; }
         private ProgressDataManager _progressDataManager;
         private CancellationToken _cancellationToken;
-        private string _objectNameMask;
+        private MaskForFileNames _objectNameMask;
 
 
-        public DbWorker(OracleConnection connection, ProgressDataManager progressDataManager, string objectNameMask/*, CancellationToken cancellationToken*/)
+        public DbWorker(OracleConnection connection, ProgressDataManager progressDataManager, MaskForFileNames objectNameMask/*, CancellationToken cancellationToken*/)
         {
             _connection = connection;
             _progressDataManager = progressDataManager;
@@ -27,7 +27,7 @@ namespace ServiceCheck.Core
             _objectNameMask = objectNameMask;
         }
 
-        public DbWorker(string connectionString, ProgressDataManager progressDataManager, string objectNameMask/*, CancellationToken cancellationToken*/)
+        public DbWorker(string connectionString, ProgressDataManager progressDataManager, MaskForFileNames objectNameMask/*, CancellationToken cancellationToken*/)
         {
             ConnectionString = connectionString;
             _progressDataManager = progressDataManager;
@@ -196,28 +196,49 @@ namespace ServiceCheck.Core
             return sourceCode.ToString();
         }
 
-        static string GetAddObjectNameMaskWhere(string fieldName, string _objectNameMask, bool firstInWhereBlock)
+        static string GetAddObjectNameMaskWhere(string fieldName, MaskForFileNames objectNameMask, bool firstInWhereBlock)
         {
-            if (string.IsNullOrWhiteSpace(_objectNameMask)) return "";
+            if (objectNameMask == null || (string.IsNullOrWhiteSpace(objectNameMask.Include) && string.IsNullOrWhiteSpace(objectNameMask.Exclude))) return "";
             var res = "";
-            var ar = _objectNameMask.Trim().Split(new []{';'}, StringSplitOptions.RemoveEmptyEntries);
-            if (ar.Any() && !string.IsNullOrWhiteSpace(ar[0]))
+            if (!string.IsNullOrWhiteSpace(objectNameMask.Include))
             {
-                if (firstInWhereBlock)
-                    res += " WHERE (";
-                else
-                    res += " AND (";
+                var ar = objectNameMask.Include.Trim().Split(new[] {';'}, StringSplitOptions.RemoveEmptyEntries);
+                if (ar.Any() && !string.IsNullOrWhiteSpace(ar[0]))
+                {
+                    if (firstInWhereBlock)
+                        res += " WHERE (";
+                    else
+                        res += " AND (";
 
-                foreach (var maskItem in ar.Where(c => !string.IsNullOrWhiteSpace(c)))
-                    res += $"{fieldName} like '{maskItem}' OR ";
+                    foreach (var maskItem in ar.Where(c => !string.IsNullOrWhiteSpace(c)))
+                        res += $"{fieldName} like '{maskItem}' OR ";
 
-                res = res.Substring(0, res.Length - 4);
-                res += ") ";
+                    res = res.Substring(0, res.Length - 4);
+                    res += ") ";
+                }
             }
+            if (!string.IsNullOrWhiteSpace(objectNameMask.Exclude))
+            {
+                var ar = objectNameMask.Exclude.Trim().Split(new[] {';'}, StringSplitOptions.RemoveEmptyEntries);
+                if (ar.Any() && !string.IsNullOrWhiteSpace(ar[0]))
+                {
+                    if (firstInWhereBlock && string.IsNullOrWhiteSpace(res))
+                        res += " WHERE (";
+                    else
+                        res += " AND (";
+
+                    foreach (var maskItem in ar.Where(c => !string.IsNullOrWhiteSpace(c)))
+                        res += $"{fieldName} not like '{maskItem}' AND ";
+
+                    res = res.Substring(0, res.Length - 4);
+                    res += ") ";
+                }
+            }
+
             return res;
         }
 
-        public static string GetObjectQuery(string objectType, string _objectNameMask)
+        public static string GetObjectQuery(string objectType, MaskForFileNames objectNameMask)
         {
             switch (objectType)
             {
@@ -227,36 +248,36 @@ namespace ServiceCheck.Core
                 case "TYPES":
                 case "VIEWS":
                     return "SELECT object_name FROM user_objects " +
-                           $"WHERE object_type = '{GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", _objectNameMask, false) +
+                           $"WHERE object_type = '{GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
                            "ORDER BY object_name";
 
                 case "PACKAGES":
                     return "SELECT distinct (object_name) FROM user_objects " +
-                           "WHERE object_type in ('PACKAGE','PACKAGE BODY') " + GetAddObjectNameMaskWhere("object_name", _objectNameMask, false) +
+                           "WHERE object_type in ('PACKAGE','PACKAGE BODY') " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
                            "ORDER BY object_name";
 
                 case "SEQUENCES":
-                    return "SELECT sequence_name AS object_name FROM user_sequences " + GetAddObjectNameMaskWhere("sequence_name", _objectNameMask, true) +
+                    return "SELECT sequence_name AS object_name FROM user_sequences " + GetAddObjectNameMaskWhere("sequence_name", objectNameMask, true) +
                            "ORDER BY sequence_name";
 
                 case "SYNONYMS":
-                    return "SELECT synonym_name AS object_name FROM user_synonyms " + GetAddObjectNameMaskWhere("synonym_name", _objectNameMask, true) +
+                    return "SELECT synonym_name AS object_name FROM user_synonyms " + GetAddObjectNameMaskWhere("synonym_name", objectNameMask, true) +
                            "ORDER BY synonym_name";
 
                 case "TABLES":
-                    return "SELECT table_name AS object_name FROM user_tables " + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true) +
+                    return "SELECT table_name AS object_name FROM user_tables " + GetAddObjectNameMaskWhere("table_name", objectNameMask, true) +
                            "ORDER BY table_name";
 
                 case "JOBS":
-                    return $"SELECT job_name AS object_name FROM user_scheduler_jobs{GetAddObjectNameMaskWhere("job_name", _objectNameMask, true)} union all select to_char(job) from user_jobs";
+                    return $"SELECT job_name AS object_name FROM user_scheduler_jobs{GetAddObjectNameMaskWhere("job_name", objectNameMask, true)} union all select to_char(job) from user_jobs";
 
                 case "DBLINKS":
-                    return "SELECT db_link AS object_name FROM user_db_links " + GetAddObjectNameMaskWhere("db_link", _objectNameMask, true) +
+                    return "SELECT db_link AS object_name FROM user_db_links " + GetAddObjectNameMaskWhere("db_link", objectNameMask, true) +
                            "ORDER BY db_link";
 
                 default:
                     return "SELECT object_name FROM user_objects " +
-                           $"WHERE object_type = '{GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", _objectNameMask, false) +
+                           $"WHERE object_type = '{GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
                            "ORDER BY object_name";
             }
         }
@@ -2031,8 +2052,7 @@ namespace ServiceCheck.Core
         }
 
 
-        public static void SaveRepoChangesInDB(string prefix, ExportProgressData progressData, string connectionString,
-            DBLog dbLogSettings, bool saveDetails)
+        public static void SaveRepoChangesInDB(string prefix, ExportProgressData progressData, string connectionString, /*DBLog dbLogSettings,*/ bool saveDetails)
         {
 
             var repoChanges = progressData.RepoChanges;
@@ -2108,36 +2128,43 @@ namespace ServiceCheck.Core
                 if (saveDetails)
                 {
 
-                    var repoChangesPlainList = progressData.RepoChangesPlainList;
-                    if (repoChangesPlainList != null && repoChangesPlainList.Any())
+                    //в БД кладем инфо только о фактических коммитах
+                    
+                    if (progressData.RepoChangesPlainList != null)
                     {
-                        query =
+                        var repoChangesPlainList = progressData.RepoChangesPlainList.Where(c=>!c.MaskWorked).ToList();
+
+                        if (repoChangesPlainList.Any())
+                        {
+                            query =
                             $@"insert into {prefix}COMMITDETAILS (id, process_id, dbid, username, commit_common_date, is_initial, 
                     commit_cur_file_time,commit_oper,commit_file,commit_file_size,obj_type) values 
                     ({prefix}COMMITDETAILS_SEQ.Nextval, :process_id, :dbid, :username, :commit_common_date, :is_initial, 
                     :commit_cur_file_time,:commit_oper,:commit_file,:commit_file_size,:obj_type)";
 
-                        using (OracleConnection connection = new OracleConnection(connectionString))
-                        {
-                            connection.Open();
-                            foreach (var repoItem in repoChangesPlainList)
+                            using (OracleConnection connection = new OracleConnection(connectionString))
                             {
-                                using (OracleCommand cmd = new OracleCommand(query, connection))
+                                connection.Open();
+                                foreach (var repoItem in repoChangesPlainList)
                                 {
-                                    cmd.Parameters.Clear();
-                                    cmd.Parameters.Add("process_id", OracleType.Number).Value = repoItem.ProcessId;
-                                    cmd.Parameters.Add("dbid", OracleType.VarChar).Value = repoItem.DBId;
-                                    cmd.Parameters.Add("username", OracleType.VarChar).Value = repoItem.UserName;
-                                    cmd.Parameters.Add("commit_common_date", OracleType.DateTime).Value =
-                                        repoItem.CommitCommonDate;
-                                    cmd.Parameters.Add("is_initial", OracleType.Number).Value = repoItem.IsInitial;
-                                    cmd.Parameters.Add("commit_cur_file_time", OracleType.DateTime).Value =
-                                        repoItem.CommitCurFileTime;
-                                    cmd.Parameters.Add("commit_oper", OracleType.Number).Value = repoItem.Operation;
-                                    cmd.Parameters.Add("commit_file", OracleType.VarChar).Value = repoItem.FileName;
-                                    cmd.Parameters.Add("commit_file_size", OracleType.Number).Value = repoItem.FileSize;
-                                    cmd.Parameters.Add("obj_type", OracleType.Number).Value = repoItem.ObjectType;
-                                    cmd.ExecuteNonQuery();
+                                    using (OracleCommand cmd = new OracleCommand(query, connection))
+                                    {
+                                        cmd.Parameters.Clear();
+                                        cmd.Parameters.Add("process_id", OracleType.Number).Value = repoItem.ProcessId;
+                                        cmd.Parameters.Add("dbid", OracleType.VarChar).Value = repoItem.DBId;
+                                        cmd.Parameters.Add("username", OracleType.VarChar).Value = repoItem.UserName;
+                                        cmd.Parameters.Add("commit_common_date", OracleType.DateTime).Value =
+                                            repoItem.CommitCommonDate;
+                                        cmd.Parameters.Add("is_initial", OracleType.Number).Value = repoItem.IsInitial;
+                                        cmd.Parameters.Add("commit_cur_file_time", OracleType.DateTime).Value =
+                                            repoItem.CommitCurFileTime;
+                                        cmd.Parameters.Add("commit_oper", OracleType.Number).Value = repoItem.Operation;
+                                        cmd.Parameters.Add("commit_file", OracleType.VarChar).Value = repoItem.FileName;
+                                        cmd.Parameters.Add("commit_file_size", OracleType.Number).Value =
+                                            repoItem.FileSize;
+                                        cmd.Parameters.Add("obj_type", OracleType.Number).Value = repoItem.ObjectType;
+                                        cmd.ExecuteNonQuery();
+                                    }
                                 }
                             }
                         }

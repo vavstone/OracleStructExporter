@@ -139,26 +139,30 @@ namespace ServiceCheck.Core
             {
 
                 var commitsList = progressData.GetAddInfo<List<RepoChangeItem>>("REPO_CHANGES");
-                var res =
-                    $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId ?? "не задано"}{Environment.NewLine}";
-
-                res += GetCommitInfo(commitsList);
-                res += Environment.NewLine;
-                res += Environment.NewLine;
-
-                //сохраняем в файл запись лога
-                var encodingToFile1251 = Encoding.GetEncoding(1251);
-                var pathToLog = _textFilesLog.PathToLogCommitsFilesC;
-                var fileName = Path.Combine(pathToLog,
-                    $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}_commits{PeriodAppendToLogFileName(_textFilesLog.LogCommitSplitPeriod)}.txt");
-                lock (lockObj2)
+                var info = GetCommitInfo(commitsList);
+                if (info != null)
                 {
-                    if (!Directory.Exists(pathToLog))
-                        Directory.CreateDirectory(pathToLog);
-                    using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                    var res =
+                        $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId ?? "не задано"}{Environment.NewLine}";
+
+                    res += info;
+                    res += Environment.NewLine;
+                    res += Environment.NewLine;
+
+                    //сохраняем в файл запись лога
+                    var encodingToFile1251 = Encoding.GetEncoding(1251);
+                    var pathToLog = _textFilesLog.PathToLogCommitsFilesC;
+                    var fileName = Path.Combine(pathToLog,
+                        $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}_commits{PeriodAppendToLogFileName(_textFilesLog.LogCommitSplitPeriod)}.txt");
+                    lock (lockObj2)
                     {
-                        // Записываем DDL объекта
-                        writer.Write(res);
+                        if (!Directory.Exists(pathToLog))
+                            Directory.CreateDirectory(pathToLog);
+                        using (StreamWriter writer = new StreamWriter(fileName, true, encodingToFile1251))
+                        {
+                            // Записываем DDL объекта
+                            writer.Write(res);
+                        }
                     }
                 }
             }
@@ -283,8 +287,7 @@ namespace ServiceCheck.Core
                 //if (_logSettings.DBLog.Enabled)
                 //{
                     //сохраняем в файл запись лога
-                    DbWorker.SaveRepoChangesInDB(_dbLog.DBLogPrefix, progressData, connectionString,
-                        dbLogSettings, saveDetails);
+                    DbWorker.SaveRepoChangesInDB(_dbLog.DBLogPrefix, progressData, connectionString/*, dbLogSettings*/, saveDetails);
                 //}
             }
 
@@ -1081,6 +1084,7 @@ namespace ServiceCheck.Core
                     new Column {Id = "filename", MinWidth = 50, Alignment = Alignment.Left},
                     new Column {Id = "filesize", MinWidth = 16, Alignment = Alignment.Right},
                     new Column {Id = "operation", MinWidth = 6, Alignment = Alignment.Center},
+                    new Column {Id = "ignorebymask", MinWidth = 7, Alignment = Alignment.Center},
                 });
 
                 var headerRows = new List<List<HeaderCell>>();
@@ -1092,6 +1096,7 @@ namespace ServiceCheck.Core
                     new HeaderCell {Content = "Файл", ColumnId = "filename"},
                     new HeaderCell {Content = "Размер (байт)", ColumnId = "filesize"},
                     new HeaderCell {Content = "Опер", ColumnId = "operation"},
+                    new HeaderCell {Content = "Игнор", ColumnId = "ignorebymask"}
 
                 });
 
@@ -1121,6 +1126,11 @@ namespace ServiceCheck.Core
                         {
                             Content = item.Operation.ToString(),
                             ColumnId = "operation"
+                        },
+                        new DataCell
+                        {
+                            Content = item.MaskWorked?"да":"",
+                            ColumnId = "ignorebymask"
                         }
                     };
                     dataRows.Add(dataRow);
@@ -1129,12 +1139,19 @@ namespace ServiceCheck.Core
                 string result = "";
                 if (isInitial)
                     result += "Первичная выгрузка. ";
-                result += $"Добавлено/изменено: {repoItems.Count}{Environment.NewLine}";
+                var ignoredStr = "";
+                var ignoredCnt = repoItems.Count(c => c.MaskWorked);
+                var factCnt = repoItems.Count(c => !c.MaskWorked);
+                if (ignoredCnt > 0)
+                {
+                    ignoredStr = $". Игнор по маске: {ignoredCnt}";
+                }
+                result += $"Добавлено/изменено: {factCnt}{ignoredStr}{Environment.NewLine}";
                 result += table.ToString();
                 return result;
             }
 
-            return "Без изменений";
+            return null;
         }
 
         public string GetToWorkInfo(List<PrognozBySchema> prognozItems, bool usePrognozInfo)

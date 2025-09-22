@@ -181,7 +181,7 @@ namespace ServiceCheck.Core
                 var targetFolder = _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo; //thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo;
                 var vcsManager = new VcsManager();
                 //var currentRepoName = $"{thread.DBSubfolder}\\{thread.UserNameSubfolder}";
-                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, _settings.SchedulerSettings.RepoSettings.IgnoreDifferences, out changesCount, out repoChanges);
+                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.IgnoreDifferences, out changesCount, out repoChanges);
             }
             catch (Exception ex)
             {
@@ -334,7 +334,7 @@ namespace ServiceCheck.Core
             var exportSettingsDetails =
                 ExportSettingsDetails.GetSumExportSettingsDetails(exportSettingsDetailsLowPriority, exportSettingsDetailsHighPriority);
             var settingsConnection = threadInfo.Connection;
-            var objectNameMask = exportSettingsDetails.MaskForFileNames?.Include;
+            var objectNameMask = exportSettingsDetails.MaskForFileNames;
             //var outputFolder = threadInfo.ExportSettings.PathToExportDataMain;
             var objectTypesToProcess = exportSettingsDetails.ObjectTypesToProcessC;
 

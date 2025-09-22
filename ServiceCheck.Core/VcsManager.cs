@@ -13,9 +13,14 @@ namespace ServiceCheck.Core
            return $"{commitDate.ToString("yyyy-MM-dd")}_{commitNum}";
         }
 
-        public bool CreateRepoSnapshot(string repoName, string vcsFolder, string snapshotFolder, int? commitNum, DateTime? commitDate, out int filesCount)
+        public static string GetRepoNameForFileNames(string dbId, string userName)
         {
-            filesCount = 0;
+            return $"{dbId}_{userName}";
+        }
+
+        public bool CreateRepoSnapshot(string repoName, string vcsFolder, string snapshotFolder, int? commitNum, DateTime? commitDate, out List<CommitShortInfo> commitShortInfoList)
+        {
+            commitShortInfoList = new List<CommitShortInfo>();
             // Нормализация путей
             repoName = repoName.Trim('\\');
             string initialRepoPath = Path.Combine(vcsFolder, "initial");
@@ -24,13 +29,15 @@ namespace ServiceCheck.Core
             if (!Directory.Exists(commitsPath)) Directory.CreateDirectory(commitsPath);
 
             // Поиск исходного снимка
-            string initialCommitDir = FindInitialCommitDir(initialRepoPath, repoName);
+            CommitShortInfo initCommitShortInfo;
+            string initialCommitDir = FindInitialCommitDir(initialRepoPath, repoName, out initCommitShortInfo);
             if (initialCommitDir == null) return false;
+            commitShortInfoList.Add(initCommitShortInfo);
 
             // Копирование исходной версии
             string sourceInitialPath = Path.Combine(initialCommitDir, repoName);
             //string destPath = Path.Combine(snapshotFolder, repoName);
-            filesCount = FilesManager.CopyDirectory(sourceInitialPath, snapshotFolder);
+            FilesManager.CopyDirectory(sourceInitialPath, snapshotFolder);
             //CopyDirectory(sourceInitialPath, destPath, out filesCount);
 
             // Применение коммитов
@@ -39,19 +46,70 @@ namespace ServiceCheck.Core
             {
                 string commitRepoPath = Path.Combine(commitDir, repoName);
                 if (!Directory.Exists(commitRepoPath)) continue;
-
+                var commitShortInfo = new CommitShortInfo();
+                int addOrUpdCnt, delCnt;
+                GetFilesCountInCommitFolder(commitRepoPath, out addOrUpdCnt, out delCnt);
+                commitShortInfo.FilesAddOrUpdateCount = addOrUpdCnt;
+                commitShortInfo.FilesDeleteCount = delCnt;
+                commitShortInfo.IsInitial = false;
+                commitShortInfo.FolderName = Path.GetFileName(commitDir);
+                commitShortInfoList.Add(commitShortInfo);
                 ApplyCommitChanges(commitRepoPath, snapshotFolder);
             }
 
             return true;
         }
 
-        private string FindInitialCommitDir(string initialPath, string repoName)
+        private static void GetFilesCountInCommitFolder(string commitFolderFullPath, out int addOrUpdFiles, out int deleteFiles)
         {
+            addOrUpdFiles = deleteFiles = 0;
+            // Проверяем существование директории
+            if (!Directory.Exists(commitFolderFullPath))
+                return;
+            // Получаем все файлы в директории
+            string[] files;
+            files = Directory.GetFiles(commitFolderFullPath, "*", SearchOption.AllDirectories);
+
+            foreach (var file in files)
+            {
+                try
+                {
+                    var fileInfo = new FileInfo(file);
+                    // Проверяем условия подсчета
+                    if (fileInfo.Length == 0)
+                        deleteFiles++;
+                    else if (fileInfo.Length > 0)
+                        addOrUpdFiles++;
+                }
+                catch (FileNotFoundException)
+                {
+                    // Пропускаем файлы, которые были удалены после получения списка
+                    continue;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Пропускаем файлы без доступа
+                    continue;
+                }
+            }
+            return;
+        }
+
+        private string FindInitialCommitDir(string initialPath, string repoName, out CommitShortInfo commitShortInfo)
+        {
+            commitShortInfo = new CommitShortInfo();
             foreach (var commitDir in Directory.GetDirectories(initialPath))
             {
                 string repoPath = Path.Combine(commitDir, repoName);
-                if (Directory.Exists(repoPath) && !FilesManager.DirectoryIsEmpty(repoPath)) return commitDir;
+                if (Directory.Exists(repoPath) && !FilesManager.DirectoryIsEmpty(repoPath))
+                {
+                    int addOrUpdCount;
+                    GetFilesCountInCommitFolder(repoPath, out addOrUpdCount, out int deleteCount);
+                    commitShortInfo.FilesAddOrUpdateCount = addOrUpdCount;
+                    commitShortInfo.IsInitial = true;
+                    commitShortInfo.FolderName = Path.GetFileName(commitDir);
+                    return commitDir;
+                }
             }
             return null;
         }
@@ -142,9 +200,9 @@ namespace ServiceCheck.Core
 
             string previousSnapshotPath = Path.Combine(currentCommitTmpDir, "previous", repo);
             FilesManager.DeleteDirectory(previousSnapshotPath);
-            int snapshotFilesCount;
+            List<CommitShortInfo> commitShortInfoList;
             bool snapshotExists = CreateRepoSnapshot(repo, vcsFolder, previousSnapshotPath, null,
-                DateTime.Now.AddDays(1), out snapshotFilesCount);
+                DateTime.Now.AddDays(1), out commitShortInfoList);
 
             if (!snapshotExists)
             {
@@ -152,22 +210,28 @@ namespace ServiceCheck.Core
                 string initialCommitDir = Path.Combine(vcsFolder, "initial", commitName, repo);
                 //CopyDirectory(repoInputPath, Path.Combine(initialCommitDir, repo), out changesCount);
                 //changesCount = FilesManager.CopyDirectory(repoInputPath, initialCommitDir);
-                changesCount = CreateInitialCommit(repoInputPath, initialCommitDir, processId, commitDate, dbSubfolder, userNameSubfolder, out repoChanges);
+                CommitShortInfo initialCommitShortInfo;
+                changesCount = CreateInitialCommit(repoInputPath, initialCommitDir, processId, commitDate, dbSubfolder, userNameSubfolder, out repoChanges, out initialCommitShortInfo);
+                commitShortInfoList.Add(initialCommitShortInfo);
                 //FilesManager.CleanDirectory(tmpPath);
             }
             else
             {
                 // Сравнение и создание дельты
                 string tmpDeltaPath = Path.Combine(currentCommitTmpDir, "new", repo);
+                CommitShortInfo commitShortInfo;
                 FilesManager.DeleteDirectory(tmpDeltaPath);
-                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, ignoreDifferences, out repoChanges);
+                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, ignoreDifferences, out repoChanges, out commitShortInfo);
+                
 
-                if (repoChanges.Any())
+                if (repoChanges.Any(c=>!c.MaskWorked))
                 {
                     // Перенос дельты в commits
                     string finalCommitPath = Path.Combine(vcsFolder, "commits", commitName, repo);
                     //MoveDirectory(Path.Combine(currentCommitDir, "new"), finalCommitPath, out changesCount);
                     changesCount = FilesManager.MoveDirectory(tmpDeltaPath, finalCommitPath);
+
+                    commitShortInfoList.Add(commitShortInfo);
                 }
             }
 
@@ -179,6 +243,31 @@ namespace ServiceCheck.Core
 
             //}
 
+            //создаем список истории всех коммитов, включая последний для синхронизации с работой GitLab сервиса
+            var commitsJournalFilePath = Path.Combine(vcsFolder, "journal");
+            if (!Directory.Exists(commitsJournalFilePath)) Directory.CreateDirectory(commitsJournalFilePath);
+            var commitsJournalFileFullName = Path.Combine(commitsJournalFilePath,
+                GetRepoNameForFileNames(dbSubfolder, userNameSubfolder) + ".csv");
+            SaveCommitShortInfoList(commitShortInfoList, commitsJournalFileFullName);
+        }
+
+        static void SaveCommitShortInfoList(List<CommitShortInfo> shortInfoList, string fileName)
+        {
+            var data = new List<List<string>>();
+            var header = new List<string>
+            {
+                "Commit", "AddOrUpd", "Del", "IsInit"
+            };
+            data.Add(header);
+            foreach (var commitShortInfo in shortInfoList)
+            {
+                var row = new List<string>
+                {
+                    commitShortInfo.FolderName, commitShortInfo.FilesAddOrUpdateCount.ToString(), commitShortInfo.FilesDeleteCount.ToString(), commitShortInfo.IsInitial?"да":"нет"
+                };
+                data.Add(row);
+            }
+            CSVWorker.WriteCsv(data, ";", fileName);
         }
 
         OracleObjectType GetOracleObjTypeByFolderName(string folderName)
@@ -201,9 +290,12 @@ namespace ServiceCheck.Core
             }
         }
 
-        private int CreateInitialCommit(string sourceDir, string destDir, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, out List<RepoChangeItem> repoChanges)
+        private int CreateInitialCommit(string sourceDir, string destDir, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, out List<RepoChangeItem> repoChanges, out CommitShortInfo commitShortInfo)
         {
             repoChanges = new List<RepoChangeItem>();
+            commitShortInfo = new CommitShortInfo();
+            commitShortInfo.IsInitial = true;
+            commitShortInfo.FolderName = GetCommitName(commitDate, processId.ToString());
             if (!Directory.Exists(destDir))
                 Directory.CreateDirectory(destDir);
             var filesCounter = 0;
@@ -232,12 +324,17 @@ namespace ServiceCheck.Core
 
                 repoChanges.Add(addItem);
             }
+
+            commitShortInfo.FilesAddOrUpdateCount = filesCounter;
             return filesCounter;
         }
 
-        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, IgnoreDifferences ignoreDifferences, out List<RepoChangeItem> repoChanges)
+        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, IgnoreDifferences ignoreDifferences, out List<RepoChangeItem> repoChanges, out CommitShortInfo commitShortInfo)
         {
             repoChanges = new List<RepoChangeItem>();
+            commitShortInfo = new CommitShortInfo();
+            commitShortInfo.IsInitial = false;
+            commitShortInfo.FolderName = GetCommitName(commitDate, processId.ToString());
 
             var inputFiles = Directory.GetFiles(inputPath, "*", SearchOption.AllDirectories);
             var previousFiles = Directory.GetFiles(previousPath, "*", SearchOption.AllDirectories);
@@ -250,12 +347,21 @@ namespace ServiceCheck.Core
                 string deltaFile = Path.Combine(deltaPath, relativePath);
                 var fileName = Path.GetFileName(file);
                 var currentFileFolder = FilesManager.GetCurrentFolderName(file);
-
-                if (!File.Exists(prevFile) || !FilesAreEqual(file, prevFile, 
-                        dbSubfolder,  userNameSubfolder, currentFileFolder, fileName, ignoreDifferences))
+                bool maskWorked = false;
+                bool filesAreEqual = false;
+                bool prevFileExists = File.Exists(prevFile);
+                if (prevFileExists)
+                    filesAreEqual = FilesAreEqual(file, prevFile, dbSubfolder, userNameSubfolder, currentFileFolder, fileName, ignoreDifferences, out maskWorked);
+                if (!prevFileExists || !filesAreEqual || maskWorked)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
-                    File.Copy(file, deltaFile);
+                    if (!maskWorked)
+                    {
+                        //копируем файл в коммит только если были фактические изменения
+                        Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
+                        File.Copy(file, deltaFile);
+                        commitShortInfo.FilesAddOrUpdateCount++;
+                    }
+
                     var addOrUpdItem = new RepoChangeItem
                     {
                         FileName = fileName, DBId = dbSubfolder, UserName = userNameSubfolder,
@@ -274,6 +380,7 @@ namespace ServiceCheck.Core
                     {
                         //измененный файл
                         addOrUpdItem.Operation = RepoOperation.UPD;
+                        addOrUpdItem.MaskWorked = maskWorked;
                     }
                     repoChanges.Add(addOrUpdItem);
                 }
@@ -290,6 +397,7 @@ namespace ServiceCheck.Core
                     string deltaFile = Path.Combine(deltaPath, relativePath);
                     Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
                     File.WriteAllBytes(deltaFile, new byte[0]); // Пустой файл как флаг удаления
+                    commitShortInfo.FilesDeleteCount++;
                     var currentFileFolder = FilesManager.GetCurrentFolderName(file);
                     //удаленный файл
                     var delItem = new RepoChangeItem
@@ -311,8 +419,9 @@ namespace ServiceCheck.Core
             }
         }
 
-        private bool FilesAreEqual(string path1, string path2, string dbId, string userName, string folderName, string fileName, IgnoreDifferences ignoreDifferences)
+        private bool FilesAreEqual(string path1, string path2, string dbId, string userName, string folderName, string fileName, IgnoreDifferences ignoreDifferences, out bool maskWorked)
         {
+            maskWorked = false;
             var filesContentEqual = File.ReadAllBytes(path1).SequenceEqual(File.ReadAllBytes(path2));
             if (filesContentEqual)
                 return true;
@@ -358,10 +467,13 @@ namespace ServiceCheck.Core
                                         (!string.IsNullOrWhiteSpace(maskParts[1]) &&
                                          (!file1LineTmp.EndsWith(maskParts[1]) || !file2LineTmp.EndsWith(maskParts[1])))) continue;
                                     maskInLineFound = true;
+                                    maskWorked = true;
                                     break;
                                 }
                                 if (!maskInLineFound) return false;
                             }
+                            //если дошли сюда, значит все строки с учетом масок идентичны
+                            return true;
                         }
                     }
                 }

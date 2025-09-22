@@ -38,9 +38,9 @@ namespace ServiceCheck.Core
             {
                 var res = new List<RepoChangeDbSchemaGroupInfo>();
                 var items = RepoChangesPlainList;
-                if (items != null && items.Any())
+                if (items != null && items.Any(c=>!c.MaskWorked))
                 {
-                    foreach (var dbIdGroup in items.GroupBy(c => c.DBId))
+                    foreach (var dbIdGroup in items.Where(c=>!c.MaskWorked).GroupBy(c => c.DBId))
                     {
                         var dbId = dbIdGroup.Key;
                         foreach (var dbUserNameGroup in dbIdGroup.GroupBy(c => c.UserName))

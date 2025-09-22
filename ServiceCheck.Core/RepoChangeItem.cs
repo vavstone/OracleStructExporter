@@ -15,5 +15,7 @@ namespace ServiceCheck.Core
         public DateTime CommitCurFileTime { get; set; }
         public bool IsInitial { get; set; }
         public long FileSize { get; set; }
+        //если MaskWorked=true, фактически файлы разные, но за счет сравнения по маске считаем их одинаковыми, и используем только для формирования лога
+        public bool MaskWorked { get; set; }
     }
 }
