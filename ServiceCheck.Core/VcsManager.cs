@@ -251,7 +251,7 @@ namespace ServiceCheck.Core
             SaveCommitShortInfoList(commitShortInfoList, commitsJournalFileFullName);
         }
 
-        static void SaveCommitShortInfoList(List<CommitShortInfo> shortInfoList, string fileName)
+        public static void SaveCommitShortInfoList(List<CommitShortInfo> shortInfoList, string fileName)
         {
             var data = new List<List<string>>();
             var header = new List<string>
