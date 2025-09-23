@@ -82,7 +82,9 @@ namespace ServiceCheck.Core
                 if (comment != null)
                 {
                     sb.AppendLine("");
-                    var colName = isTable ? comment.ColumnName.ToLower() : comment.ColumnName.ToUpper();
+                    //Для представления ранее - в upper, затем - берем оригинальное, пробуем
+                    //var colName = isTable ? comment.ColumnName.ToLower() : comment.ColumnName.ToUpper();
+                    var colName = isTable ? comment.ColumnName.ToLower() : comment.ColumnName;
                     sb.Append($"comment on column {objectName}.{colName}");
                     if (isTable)
                     {
@@ -811,7 +813,24 @@ namespace ServiceCheck.Core
             var colsToShow = curViewColumnsStruct.Where(c => c.HiddenColumn != "YES").OrderBy(c => c.ColumnId)
                 .ToList();
 
-            var sb = new StringBuilder($"create or replace force view {objectName.ToLower()} as");
+            var colCompar = new ViewColumnComparator();
+            var needExplColList =
+                colCompar.NeedExplicitColumnList(colsToShow.Select(c => c.ColumnNameToShowWithoutBrackets).ToList(), viewText);
+            var explColList = " ";
+            if (needExplColList)
+            {
+                explColList = Environment.NewLine+"(";
+                for (int i = 0;i<colsToShow.Count;i++)
+                {
+                    var colName = colsToShow[i].ColumnNameToShow;
+                    explColList += colName;
+                    if (i < colsToShow.Count - 1)
+                        explColList += ", ";
+                }
+                explColList += ")"+Environment.NewLine;
+            }
+
+            var sb = new StringBuilder($"create or replace force view {objectName.ToLower()}{explColList}as");
             sb.AppendLine();
             sb.Append(viewText);
             sb.Append(";");

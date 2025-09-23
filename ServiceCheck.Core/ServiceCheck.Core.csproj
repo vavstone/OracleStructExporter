@@ -120,6 +120,7 @@
     <Compile Include="TP\HData.cs" />
     <Compile Include="TP\Processor.cs" />
     <Compile Include="VcsManager.cs" />
+    <Compile Include="ViewColumnComparator.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

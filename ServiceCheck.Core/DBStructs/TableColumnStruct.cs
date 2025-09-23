@@ -24,6 +24,11 @@
                 ? $@"""{ColumnName}"""
                 : ColumnName.ToLower();
 
+        public string ColumnNameToShowWithoutBrackets =>
+            ColumnName.ContainsLowerCaseSymbols()
+                ? $@"{ColumnName}"
+                : ColumnName.ToLower();
+
         public TableIdentityColumnStruct IdentityColumnStruct { get; set; }
         
     }
