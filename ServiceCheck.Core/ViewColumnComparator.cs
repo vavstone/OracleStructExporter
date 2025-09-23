@@ -245,9 +245,12 @@ namespace ServiceCheck.Core
             }
 
             // Случай 6: Простое имя колонки (без пробелов и операторов)
-            if (!expr.Contains(' ') && !expr.Contains('(') && !expr.Contains(')') &&
-                !expr.Contains('+') && !expr.Contains('-') && !expr.Contains('*') &&
-                !expr.Contains('/') && !expr.Contains('|'))
+            if (!expr.Contains('(') && !expr.Contains(')') &&
+                 !expr.Contains('+') && !expr.Contains('-') && 
+                 !expr.Contains('*') && !expr.Contains('/') && 
+                 !expr.Contains('|') && 
+                 //в некоторых случаях внутри кавычек бывают пробелы
+                 (!expr.Contains(' ') || expr.Contains('"')))
             {
                 // Если есть квалификатор таблицы, берем только имя колонки
                 if (expr.Contains('.'))
