@@ -452,7 +452,7 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = "SELECT job_name, job_type, job_action, start_date, repeat_interval, end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs" + GetAddObjectNameMaskWhere("job_name", _objectNameMask, true);
+                string ddlQuery = "SELECT job_name, job_type, job_action, CAST(start_date AS DATE) start_date, repeat_interval, CAST(end_date AS DATE) end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs" + GetAddObjectNameMaskWhere("job_name", _objectNameMask, true);
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
