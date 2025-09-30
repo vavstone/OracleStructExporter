@@ -232,7 +232,7 @@ namespace ServiceCheck.Scheduler
         //    //    .ToArray();
         //}
 
-        private static List<ConnectionToProcess> SelectConnectionsToProcess(List<SchemaWorkAggrStat> statInfo)
+        /*private static List<ConnectionToProcess> SelectConnectionsToProcess(List<SchemaWorkAggrStat> statInfo)
         {
             var listEnabledConnections =
                 settings.SchedulerSettings.ConnectionsToProcess.ConnectionListToProcess.Where(c =>
@@ -282,7 +282,7 @@ namespace ServiceCheck.Scheduler
 
             return listToProcessConnections;
 
-        }
+        }*/
 
         
 

@@ -2,10 +2,10 @@
 
 namespace ServiceCheck.Core
 {
-    public class ObjectTypeNames
+    public class ObjectTypeName
     {
         public string SchemaName { get; set; }
         public string ObjectType { get; set; }
-        public List<string> ObjectNames { get; set; } = new List<string>();
+        public string ObjectName { get; set; }
     }
 }

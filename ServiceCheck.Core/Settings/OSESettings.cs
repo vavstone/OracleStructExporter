@@ -18,6 +18,7 @@ namespace ServiceCheck.Core
 
         public SchedulerSettings SchedulerSettings { get; set; }
         public WinAppSettings WinAppSettings { get; set; }
+        public SchedulerOuterSettings SchedulerOuterSettings { get; set; }
 
         public ExportSettings ExportSettings { get; set; }
         public TextFilesLog TextFilesLog { get; set; }
@@ -39,6 +40,15 @@ namespace ServiceCheck.Core
             get
             {
                 return AppType == "WinApp";
+            }
+        }
+
+        [XmlIgnore]
+        public bool IsSchedulerOuter
+        {
+            get
+            {
+                return AppType == "SchedulerOuter";
             }
         }
 
