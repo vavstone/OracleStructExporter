@@ -753,21 +753,36 @@ namespace ServiceCheck.Core
                                         }
 
                                         if (string.IsNullOrWhiteSpace(ddl))
-                                            throw new Exception($"Для объекта {objectName} не удалось получить ddl");
-
-                                        string extension = getExtensionForObjectType(objectType,
-                                            !string.IsNullOrWhiteSpace(ddlPackageHead),
-                                            !string.IsNullOrWhiteSpace(ddlPackageBody));
-                                        var objectTypeSubdirName = objectType;
-                                        if (objectType == "JOBS")
                                         {
-                                            if (currentObjIsSchedulerJob)
-                                                objectTypeSubdirName = "scheduler_jobs";
-                                            else if (currentObjIsDBMSJob)
-                                                objectTypeSubdirName = "dbms_jobs";
+                                            //throw new Exception($"Для объекта {objectName} не удалось получить ddl");
+                                            var message =
+                                                $"Предупреждение!!! Для объекта {objectName} не удалось получить ddl!";
+                                            var progressWarning = new ExportProgressData(
+                                                ExportProgressDataLevel.MOMENTALEVENTINFO,
+                                                ExportProgressDataStage.PROCESS_OBJECT_TYPE);
+                                            progressWarning.SetTextAddInfo("MOMENTAL_INFO", message);
+                                            progressManager.ReportCurrentProgress(progressWarning);
+                                            currentObjectNumber--;
+                                            currentTypeObjectsCounter--;
+                                        }
+                                        else
+                                        {
+                                            string extension = getExtensionForObjectType(objectType,
+                                                !string.IsNullOrWhiteSpace(ddlPackageHead),
+                                                !string.IsNullOrWhiteSpace(ddlPackageBody));
+                                            var objectTypeSubdirName = objectType;
+                                            if (objectType == "JOBS")
+                                            {
+                                                if (currentObjIsSchedulerJob)
+                                                    objectTypeSubdirName = "scheduler_jobs";
+                                                else if (currentObjIsDBMSJob)
+                                                    objectTypeSubdirName = "dbms_jobs";
+                                            }
+
+                                            SaveObjectToFile(threadInfo, objectName, objectTypeSubdirName, ddl, extension);
                                         }
 
-                                        SaveObjectToFile(threadInfo, objectName, objectTypeSubdirName, ddl, extension);
+                                        
 
                                         //currentObjectName = string.Empty;
 
