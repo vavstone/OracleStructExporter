@@ -75,11 +75,13 @@ namespace ServiceCheckOuter
                     var dbIdC = connectionToProcess.DbId.ToUpper();
                     var userName = connectionToProcess.UserName.ToUpper();
                     var dbLink = connectionToProcess.DbLink.ToUpper();
+                    var dbFolder = connectionToProcess.DbFolder.ToUpper();
                     var conn = settings.Connections.FirstOrDefault(c =>
                         c.DBIdC.ToUpper() == dbIdC && c.UserName.ToUpper() == userName);
                     ThreadInfoOuter threadInfo = new ThreadInfoOuter();
                     threadInfo.Connection = conn;
                     threadInfo.DbLink = dbLink;
+                    threadInfo.DBSubfolder = dbFolder;
                     //TODO
                     threadInfo.SchemasInclude = new List<string>();
                     threadInfo.SchemasExclude = new List<string>();

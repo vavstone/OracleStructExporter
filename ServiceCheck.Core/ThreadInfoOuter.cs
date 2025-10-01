@@ -12,6 +12,7 @@ namespace ServiceCheck.Core
         public DateTime StartDateTime { get; private set; }
         public Connection Connection { get; set; }
         public string DbLink { get; set; }
+        public string DBSubfolder { get; set; }
         public List<string> SchemasInclude { get; set; }
         public List<string> SchemasExclude { get; set; }
         public ExportSettings ExportSettings { get; set; }
@@ -32,14 +33,6 @@ namespace ServiceCheck.Core
             {
                 //return ExportSettings.UseProcessesSubFoldersInMain ? CommitName : string.Empty;
                 return VcsManager.GetCommitName(StartDateTime, ProcessId);
-            }
-        }
-
-        public string DBSubfolder
-        {
-            get
-            {
-                return Connection.DBIdCForFileSystem.ToUpper();
             }
         }
 

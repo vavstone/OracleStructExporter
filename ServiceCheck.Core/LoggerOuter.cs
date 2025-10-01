@@ -295,6 +295,7 @@ namespace ServiceCheck.Core
 
         public string GetStatInfoV2(List<SchemaWorkAggrFullStatOuter> statList, int lastDaysToAnalyz)
         {
+            //TODO переработать
             if (statList.Any())
             {
                 var table = new TableBuilder.TableBuilder();
@@ -447,6 +448,7 @@ namespace ServiceCheck.Core
 
         public string GetStatFullInfo(List<SchemaWorkAggrFullStatOuter> statList, int lastDaysToAnalyz)
         {
+            //TODO переработать
             if (statList.Any())
             {
                 var table = new TableBuilder.TableBuilder();

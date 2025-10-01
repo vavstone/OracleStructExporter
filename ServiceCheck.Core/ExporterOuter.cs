@@ -347,13 +347,19 @@ namespace ServiceCheck.Core
                             "USER_TAB_SUBPARTITIONS"
                         };
 
+                        DbLinkAttrigutes currentDbLink = null;
+                        //получаем все dblink, чтобы понять под кем логически мы сейчас работаем
+                        if (!string.IsNullOrWhiteSpace(threadInfoOuter.DbLink))
+                        {
+                            currentDbLink = dbWorker.GetDbLink(threadInfoOuter.DbLink,
+                                ExportProgressDataStageOuter.GET_CURRENT_DBLINK, out canceledByUser);
+                        }
+
                         var systemViewInfo = dbWorker.GetInfoAboutSystemViews(systemViewsToCheck,
                             ExportProgressDataStageOuter.GET_INFO_ABOUT_SYS_VIEW, out canceledByUser);
                         if (canceledByUser) return;
 
                         dbWorker.SetSessionTransform(exportSettingsDetails.SessionTransformC);
-
-
 
                         List<ObjectTypeNames> namesList = dbWorker.GetObjectsNames(objectTypesToProcess, schemasIncludeStr, schemasExcludeStr,
                             ExportProgressDataStageOuter.GET_OBJECTS_NAMES, out canceledByUser);
@@ -361,11 +367,20 @@ namespace ServiceCheck.Core
 
                         schemaObjectsCountPlan = namesList.Sum(c => c.ObjectNames.Count);
 
-
-
-                        var grants = dbWorker.GetAllObjectsGrants(userId, exportSettingsDetails.SkipGrantOptionsC,
+                        var grants = dbWorker.GetAllObjectsGrants(schemasIncludeStr, schemasExcludeStr, exportSettingsDetails.SkipGrantOptionsC,
                             ExportProgressDataStageOuter.GET_GRANTS, schemaObjectsCountPlan, out canceledByUser);
                         if (canceledByUser) return;
+
+                        //имя пользователя, под которым сейчас логически работаем
+                        //если dblink не указан, то это пользователь коннекта
+                        //если dblink указан, то это пользователь dblink
+                        string logicalUserName = string.IsNullOrWhiteSpace(threadInfoOuter.DbLink)?
+                            settingsConnection.UserName.ToUpper():
+                            currentDbLink.DbLink.ToUpper();
+
+                        GrantsOuterManager.UpdateGrantsForCurrentSchema(grants, _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo,
+                            threadInfoOuter.DBSubfolder, logicalUserName);
+
 
                         if (objectTypesToProcess.Contains("TABLES") || objectTypesToProcess.Contains("VIEWS"))
                         {
@@ -720,21 +735,34 @@ namespace ServiceCheck.Core
                                         }
 
                                         if (string.IsNullOrWhiteSpace(ddl))
-                                            throw new Exception($"Для объекта {objectName} не удалось получить ddl");
-
-                                        string extension = getExtensionForObjectType(objectType,
-                                            !string.IsNullOrWhiteSpace(ddlPackageHead),
-                                            !string.IsNullOrWhiteSpace(ddlPackageBody));
-                                        var objectTypeSubdirName = objectType;
-                                        if (objectType == "JOBS")
                                         {
-                                            if (currentObjIsSchedulerJob)
-                                                objectTypeSubdirName = "scheduler_jobs";
-                                            else if (currentObjIsDBMSJob)
-                                                objectTypeSubdirName = "dbms_jobs";
+                                            //throw new Exception($"Для объекта {objectName} не удалось получить ddl");
+                                            var message =
+                                                $"Предупреждение!!! Для объекта {objectName} не удалось получить ddl!";
+                                            var progressWarning = new ExportProgressDataOuter(
+                                                ExportProgressDataLevel.MOMENTALEVENTINFO,
+                                                ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
+                                            progressWarning.SetTextAddInfo("MOMENTAL_INFO", message);
+                                            progressManager.ReportCurrentProgress(progressWarning);
+                                            currentObjectNumber--;
+                                            currentTypeObjectsCounter--;
                                         }
+                                        else
+                                        {
+                                            string extension = getExtensionForObjectType(objectType,
+                                                !string.IsNullOrWhiteSpace(ddlPackageHead),
+                                                !string.IsNullOrWhiteSpace(ddlPackageBody));
+                                            var objectTypeSubdirName = objectType;
+                                            if (objectType == "JOBS")
+                                            {
+                                                if (currentObjIsSchedulerJob)
+                                                    objectTypeSubdirName = "scheduler_jobs";
+                                                else if (currentObjIsDBMSJob)
+                                                    objectTypeSubdirName = "dbms_jobs";
+                                            }
 
-                                        SaveObjectToFile(threadInfoOuter, objectName, objectTypeSubdirName, ddl, extension);
+                                            SaveObjectToFile(threadInfoOuter, objectName, objectTypeSubdirName, ddl, extension);
+                                        }
 
                                         //currentObjectName = string.Empty;
 
@@ -970,6 +998,7 @@ namespace ServiceCheck.Core
 
         public static PrognozBySchemaOuter SelectConnectionToProcess(List<SchemaWorkAggrFullStatOuter> statInfo, int minSuccessResultsForPrognoz)
         {
+            //TODO переработать
             PrognozBySchemaOuter res = null;
 
             var connToProcess = new List<SchemaWorkAggrFullStatOuter>();
@@ -1039,18 +1068,16 @@ namespace ServiceCheck.Core
                         minSuccessResultsForPrognoz, null);
 
                 //если что-то нашли в статистике
-                if (newItem!=null)
-                {
-                    newItem.DbId = statItem.DBId.ToUpper();
-                    newItem.UserName = statItem.UserName.ToUpper();
+                if (newItem != null)
                     res = newItem;
-                }
                 else
-                {
-                    res = new PrognozBySchemaOuter {DbId = statItem.DBId.ToUpper(), UserName = statItem.UserName.ToUpper()};
-                }
-            }
+                    res = new PrognozBySchemaOuter();
 
+                res.DbId = statItem.DBId.ToUpper();
+                res.UserName = statItem.UserName.ToUpper();
+                res.DbLink = statItem.DbLink.ToUpper();
+                res.DbFolder = statItem.DbFolder.ToUpper();
+            }
             return res;
         }
     }

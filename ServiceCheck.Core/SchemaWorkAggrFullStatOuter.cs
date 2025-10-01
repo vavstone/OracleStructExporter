@@ -14,6 +14,7 @@ namespace ServiceCheck.Core
         public string DBId { get; set; }
         public string UserName { get; set; }
         public string DbLink { get; set; }
+        public string DbFolder { get; set; }
         public bool IsScheduled { get; set; }
         public int? OneTimePerHoursPlan { get; set; }
         public TimeSpan? TimeBeforePlanLaunch { get; set; }

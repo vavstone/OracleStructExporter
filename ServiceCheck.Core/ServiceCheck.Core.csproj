@@ -49,6 +49,7 @@
     <Compile Include="CommitShortInfo.cs" />
     <Compile Include="CSVWorker.cs" />
     <Compile Include="DBStructs\DBMSJob.cs" />
+    <Compile Include="DBStructs\DbLinkAttrigutes.cs" />
     <Compile Include="DBStructs\SchedulerJobArgument.cs" />
     <Compile Include="DBStructs\SchedulerJob.cs" />
     <Compile Include="DBStructs\TableIdentityColumnStruct.cs" />
@@ -61,6 +62,7 @@
     <Compile Include="ExportProgressDataLevel.cs" />
     <Compile Include="ExportProgressDataStageOuter.cs" />
     <Compile Include="ExportProgressDataStage.cs" />
+    <Compile Include="GrantsOuterManager.cs" />
     <Compile Include="LoggerOuter.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="ObjectTypeName.cs" />

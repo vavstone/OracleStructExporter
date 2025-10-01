@@ -286,22 +286,23 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public static string GetObjectQuery(List<string> objectTypesList, bool isJobs, string ownersInclude, string ownersExclude)
+        public string GetObjectQuery(List<string> objectTypesList, bool isJobs, string ownersInclude, string ownersExclude)
         {
             var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
             var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+            var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
             if (!isJobs)
             {
                 var objTypesStr = objectTypesList.MergeFormatted("'", ",");
-                return $"SELECT owner, object_type, object_name FROM all_objects WHERE OBJECT_TYPE IN ({objTypesStr}){strInclude}{strExclude}";
+                return $"SELECT owner, object_type, object_name FROM all_objects{dbLinkAppend} WHERE OBJECT_TYPE IN ({objTypesStr}){strInclude}{strExclude}";
             }
             else
             {
                 var strIncludeForDBMSJob = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND schema_user IN ({ownersInclude})";
                 var strExcludeForDBMSJob = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND schema_user NOT IN ({ownersExclude})";
-                return $"SELECT owner, 'SCHEDULER_JOB' object_type, job_name object_name FROM all_scheduler_jobs WHERE 1=1{strInclude}{strExclude}" +
+                return $"SELECT owner, 'SCHEDULER_JOB' object_type, job_name object_name FROM all_scheduler_jobs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}" +
                        "UNION ALL" +
-                       $"SELECT schema_user owner, 'DBMS_JOB' object_type, to_char(job) object_name from all_jobs WHERE 1=1{strIncludeForDBMSJob}{strExcludeForDBMSJob}";
+                       $"SELECT schema_user owner, 'DBMS_JOB' object_type, to_char(job) object_name from all_jobs{dbLinkAppend} WHERE 1=1{strIncludeForDBMSJob}{strExcludeForDBMSJob}";
             }
         }
 
@@ -1179,7 +1180,8 @@ namespace ServiceCheck.Core
                 {
                     var tmpAr = new List<Tuple<string,string>>();
                     var names = viewNames.MergeFormatted("'", ",");
-                    string ddlQuery = $@"SELECT table_name, column_name FROM all_tab_cols WHERE owner = 'SYS' AND table_name in ({names})";
+                    var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                    string ddlQuery = $@"SELECT table_name, column_name FROM all_tab_cols{dbLinkAppend} WHERE owner = 'SYS' AND table_name in ({names})";
                     using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                     {
                         using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1779,7 +1781,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<GrantAttributes> GetAllObjectsGrants(string schemaName, List<string> skipGrantOptions, ExportProgressDataStageOuter stage, int schemaObjCountPlan, out bool canceledByUser)
+        public List<GrantAttributes> GetAllObjectsGrants( string schemasIncludeStr, string schemasExcludeStr, List<string> skipGrantOptions, ExportProgressDataStageOuter stage, int schemaObjCountPlan, out bool canceledByUser)
         {
             var res = new List<GrantAttributes>();
 
@@ -1799,13 +1801,12 @@ namespace ServiceCheck.Core
 
             try
             {
-                string grantQuery = @"SELECT table_name, grantee, privilege, grantable, hierarchy
-            FROM user_tab_privs 
-            WHERE owner = :schemaName " + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);// +
-                //"ORDER BY table_name, privilege";
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(schemasIncludeStr) ? "" : $" AND OWNER IN ({schemasIncludeStr})";
+                var strExclude = string.IsNullOrWhiteSpace(schemasExcludeStr) ? "" : $" AND OWNER NOT IN ({schemasExcludeStr})";
+                string grantQuery = $@"SELECT table_schema, table_name, grantee, privilege, grantable, hierarchy FROM all_tab_privs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(grantQuery, _connection))
                 {
-                    cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
                     using (OracleDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
@@ -1813,6 +1814,7 @@ namespace ServiceCheck.Core
                             if (!skipGrantOptions.Contains(reader["privilege"].ToString().ToUpper()))
                             {
                                 var item = new GrantAttributes();
+                                item.ObjectSchema = reader["table_schema"].ToString();
                                 item.ObjectName = reader["table_name"].ToString();
                                 item.Grantee = reader["grantee"].ToString();
                                 item.Privilege = reader["privilege"].ToString();
@@ -1839,6 +1841,55 @@ namespace ServiceCheck.Core
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
+        }
+
+
+        public DbLinkAttrigutes GetDbLink(string dbLinkName, ExportProgressDataStageOuter stage, out bool canceledByUser)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                canceledByUser = true;
+                var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
+                _progressDataManager.ReportCurrentProgress(progressDataCancel);
+                return null;
+            }
+            canceledByUser = false;
+
+            var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
+            _progressDataManager.ReportCurrentProgress(progressData);
+
+            try
+            {
+                string grantQuery = @"SELECT owner, username, host FROM all_db_links WHERE db_link = :db_link";
+                using (OracleCommand cmd = new OracleCommand(grantQuery, _connection))
+                {
+                    cmd.Parameters.Add("db_link", OracleType.VarChar).Value = dbLinkName.ToUpper();
+                    using (OracleDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            var item = new DbLinkAttrigutes();
+                                item.Owner = reader["owner"].ToString();
+                                item.UserName = reader["username"].ToString();
+                                item.Host = reader["host"].ToString();
+                                item.DbLink = dbLinkName.ToUpper();
+                                return item;
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
+            }
+
+            var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
+            progressData2.MetaObjCountFact = 1;
+            _progressDataManager.ReportCurrentProgress(progressData2);
+            return null;
         }
 
         public string GetObjectDdl(string objectTypeMulti, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
