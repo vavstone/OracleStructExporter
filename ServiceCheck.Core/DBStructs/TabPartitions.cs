@@ -4,6 +4,7 @@ namespace ServiceCheck.Core
 {
     public class TabPartitions
     {
+        public string TableOwner { get; set; }
         public string TableName { get; set; }
         public string PartitionName { get; set; }
         public int? SubPartitionCount { get; set; }

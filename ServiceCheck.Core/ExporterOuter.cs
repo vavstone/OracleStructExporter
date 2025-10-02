@@ -242,7 +242,7 @@ namespace ServiceCheck.Core
                                    $"(CONNECT_DATA=(SID={dbLogConn.SID})));" +
                                    $"User Id={dbLogConn.UserName};Password={dbLogConn.PasswordC};";
             _mainProgressManager.SetSchedulerProps(null, dbLogConn);
-            _mainDbWorker = new DbWorkerOuter(connectionString, null, _mainProgressManager, null);
+            _mainDbWorker = new DbWorkerOuter(connectionString, null, _mainProgressManager);
         }
 
         public /*async*/ void StartWork(ThreadInfoOuter ThreadInfoOuter, string connToProcessInfo, bool testMode)
@@ -296,7 +296,7 @@ namespace ServiceCheck.Core
             var exportSettingsDetails =
                 ExportSettingsDetails.GetSumExportSettingsDetails(exportSettingsDetailsLowPriority, exportSettingsDetailsHighPriority);
             var settingsConnection = threadInfoOuter.Connection;
-            var objectNameMask = exportSettingsDetails.MaskForFileNames;
+            //var objectNameMask = exportSettingsDetails.MaskForFileNames;
             //var outputFolder = ThreadInfoOuter.ExportSettings.PathToExportDataMain;
             var objectTypesToProcess = exportSettingsDetails.ObjectTypesToProcessC;
 
@@ -324,7 +324,7 @@ namespace ServiceCheck.Core
                         var osb = new OracleConnectionStringBuilder(connection.ConnectionString);
                         var userId = osb.UserID.ToUpper();
 
-                        var dbWorker = new DbWorkerOuter(connection, threadInfoOuter.DbLink, progressManager, objectNameMask);
+                        var dbWorker = new DbWorkerOuter(connection, threadInfoOuter.DbLink, progressManager);
                         dbWorker.SetCancellationToken(ct);
 
                         var systemViewsToCheck = new List<string>
@@ -351,7 +351,7 @@ namespace ServiceCheck.Core
                         //получаем все dblink, чтобы понять под кем логически мы сейчас работаем
                         if (!string.IsNullOrWhiteSpace(threadInfoOuter.DbLink))
                         {
-                            currentDbLink = dbWorker.GetDbLink(threadInfoOuter.DbLink,
+                            currentDbLink = dbWorker.GetCurDbLink(threadInfoOuter.DbLink,
                                 ExportProgressDataStageOuter.GET_CURRENT_DBLINK, out canceledByUser);
                         }
 
@@ -376,21 +376,21 @@ namespace ServiceCheck.Core
                         //если dblink указан, то это пользователь dblink
                         string logicalUserName = string.IsNullOrWhiteSpace(threadInfoOuter.DbLink)?
                             settingsConnection.UserName.ToUpper():
-                            currentDbLink.DbLink.ToUpper();
+                            currentDbLink.UserName.ToUpper();
 
-                        GrantsOuterManager.UpdateGrantsForCurrentSchema(grants, _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo,
+                        GrantsOuterManager.SaveGrantsForCurrentSchemaAndForPublic(grants, _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo,
                             threadInfoOuter.DBSubfolder, logicalUserName);
 
 
                         if (objectTypesToProcess.Contains("TABLES") || objectTypesToProcess.Contains("VIEWS"))
                         {
                             tablesAndViewsColumnStruct = dbWorker.GetTablesAndViewsColumnsStruct(
-                                ExportProgressDataStageOuter.GET_COLUMNS, schemaObjectsCountPlan, systemViewInfo,
+                                ExportProgressDataStageOuter.GET_COLUMNS, schemaObjectsCountPlan,schemasIncludeStr, schemasExcludeStr, systemViewInfo,
                                 out canceledByUser);
                             if (canceledByUser) return;
 
                             tablesAndViewsColumnsComments = dbWorker.GetTablesAndViewsColumnComments(
-                                ExportProgressDataStageOuter.GET_COLUMNS_COMMENTS, schemaObjectsCountPlan,
+                                ExportProgressDataStageOuter.GET_COLUMNS_COMMENTS, schemaObjectsCountPlan,schemasIncludeStr, schemasExcludeStr, 
                                 out canceledByUser);
                             if (canceledByUser) return;
                         }
@@ -399,13 +399,13 @@ namespace ServiceCheck.Core
                         var sequencesStructs = new List<SequenceAttributes>();
                         var schedulerJobsStructs = new List<SchedulerJob>();
                         var dbmsJobsStructs = new List<DBMSJob>();
-                        var packagesHeaders = new Dictionary<string, string>();
-                        var packagesBodies = new Dictionary<string, string>();
-                        var functionsText = new Dictionary<string, string>();
-                        var proceduresText = new Dictionary<string, string>();
-                        var triggersText = new Dictionary<string, string>();
-                        var typesText = new Dictionary<string, string>();
-                        var viewsText = new Dictionary<string, string>();
+                        var packagesHeaders = new List<DbObjectText>();
+                        var packagesBodies = new List<DbObjectText>();
+                        var functionsText = new List<DbObjectText>();
+                        var proceduresText = new List<DbObjectText>();
+                        var triggersText = new List<DbObjectText>();
+                        var typesText = new List<DbObjectText>();
+                        var viewsText = new List<DbObjectText>();
 
                         //if (!ThreadInfoOuter.ExportSettings.WriteOnlyToMainDataFolder ||
                         //    ThreadInfoOuter.ExportSettings.ClearMainFolderBeforeWriting)
@@ -452,7 +452,7 @@ namespace ServiceCheck.Core
                                 if (objectType == "SYNONYMS")
                                 {
                                     synonymsStructs = dbWorker.GetSynonyms(ExportProgressDataStageOuter.GET_SYNONYMS,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,
+                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
                                     if (canceledByUser) return;
                                 }
@@ -460,7 +460,7 @@ namespace ServiceCheck.Core
                                 if (objectType == "SEQUENCES")
                                 {
                                     sequencesStructs = dbWorker.GetSequences(ExportProgressDataStageOuter.GET_SEQUENCES,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,
+                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
                                     if (canceledByUser) return;
                                 }
@@ -470,10 +470,10 @@ namespace ServiceCheck.Core
                                     schedulerJobsStructs = dbWorker.GetSchedulerJobs(
                                         ExportProgressDataStageOuter.GET_SCHEDULER_JOBS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType,  schemasIncludeStr, schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
                                     dbmsJobsStructs = dbWorker.GetDBMSJobs(ExportProgressDataStageOuter.GET_DMBS_JOBS,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,
+                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
                                     if (canceledByUser) return;
                                 }
@@ -483,14 +483,14 @@ namespace ServiceCheck.Core
                                     packagesHeaders = dbWorker.GetObjectsSourceByType("PACKAGE", userId,
                                         ExportProgressDataStageOuter.GET_PACKAGES_HEADERS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,   out canceledByUser);
                                     if (canceledByUser) return;
 
                                     packagesBodies =
                                         dbWorker.GetObjectsSourceByType("PACKAGE BODY", userId,
                                             ExportProgressDataStageOuter.GET_PACKAGES_BODIES, schemaObjectsCountPlan,
                                             typeObjCountPlan,
-                                            currentObjectNumber, objectType, out canceledByUser);
+                                            currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -500,7 +500,7 @@ namespace ServiceCheck.Core
                                         DbWorker.GetObjectTypeName(objectType),
                                         userId, ExportProgressDataStageOuter.GET_FUNCTIONS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -510,7 +510,7 @@ namespace ServiceCheck.Core
                                         DbWorker.GetObjectTypeName(objectType),
                                         userId, ExportProgressDataStageOuter.GET_PROCEDURES, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -520,7 +520,7 @@ namespace ServiceCheck.Core
                                         DbWorker.GetObjectTypeName(objectType),
                                         userId, ExportProgressDataStageOuter.GET_TRIGGERS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -529,7 +529,7 @@ namespace ServiceCheck.Core
                                     typesText = dbWorker.GetObjectsSourceByType(DbWorker.GetObjectTypeName(objectType),
                                         userId, ExportProgressDataStageOuter.GET_TYPES, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -539,17 +539,16 @@ namespace ServiceCheck.Core
                                     tablesConstraints = dbWorker.GetTablesConstraints(userId,
                                         ExportProgressDataStageOuter.GET_TABLE_CONSTRAINTS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
 
                                     tablesStructs = dbWorker.GetTablesStruct(ExportProgressDataStageOuter.GET_TABLES_STRUCTS,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,
+                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,  schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
                                     if (canceledByUser) return;
 
-                                    tablesIndexes = dbWorker.GetTablesIndexes(userId,
-                                        ExportProgressDataStageOuter.GET_TABLES_INDEXES,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,
+                                    tablesIndexes = dbWorker.GetTablesIndexes(ExportProgressDataStageOuter.GET_TABLES_INDEXES,
+                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
                                     if (canceledByUser) return;
 
@@ -557,13 +556,13 @@ namespace ServiceCheck.Core
                                         dbWorker.GetTableOrViewComments(dbObjectType,
                                             ExportProgressDataStageOuter.GET_TABLES_COMMENTS, schemaObjectsCountPlan,
                                             typeObjCountPlan,
-                                            currentObjectNumber, objectType, out canceledByUser);
+                                            currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
 
                                     partTables = dbWorker.GetTablesPartitions(exportSettingsDetails.GetPartitionMode,
                                         ExportProgressDataStageOuter.GET_TABLES_PARTS, schemaObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, systemViewInfo, out canceledByUser);
+                                        currentObjectNumber, objectType, systemViewInfo,  schemasIncludeStr, schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -572,14 +571,14 @@ namespace ServiceCheck.Core
 
                                     viewsText = dbWorker.GetViews(ExportProgressDataStageOuter.GET_VIEWS,
                                         schemaObjectsCountPlan, typeObjCountPlan,
-                                        currentObjectNumber, objectType, out canceledByUser);
+                                        currentObjectNumber, objectType,schemasIncludeStr, schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
 
                                     viewsComments =
                                         dbWorker.GetTableOrViewComments(dbObjectType,
                                             ExportProgressDataStageOuter.GET_VIEWS_COMMENTS, schemaObjectsCountPlan,
                                             typeObjCountPlan,
-                                            currentObjectNumber, objectType, out canceledByUser);
+                                            currentObjectNumber, objectType,  schemasIncludeStr, schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -627,7 +626,7 @@ namespace ServiceCheck.Core
 
                                         if (objectType == "PACKAGES")
                                         {
-                                            ddlPackageHead = DDLCreator.GetObjectDdlForPackageHeader(packagesHeaders,
+                                            ddlPackageHead = DDLCreator.GetObjectDdlForPackageHeader(packagesHeaders, 
                                                 objectName,
                                                 exportSettingsDetails.AddSlashToC);
                                             ddlPackageBody = DDLCreator.GetObjectDdlForPackageBody(packagesBodies,
@@ -705,7 +704,7 @@ namespace ServiceCheck.Core
                                             ddl = dbWorker.GetObjectDdl(objectType, objectName,
                                                 exportSettingsDetails.SetSequencesValuesTo1,
                                                 exportSettingsDetails.AddSlashToC, ExportProgressDataStageOuter.GET_DBLINK,
-                                                schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber,
+                                                schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, schemasIncludeStr, schemasExcludeStr,
                                                 out canceledByUser);
                                             if (canceledByUser) return;
                                         }

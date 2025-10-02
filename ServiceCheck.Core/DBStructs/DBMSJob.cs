@@ -5,6 +5,7 @@ namespace ServiceCheck.Core.DBStructs
 {
     public class DBMSJob
     {
+        public string Owner { get; set; }
         public int Job { get; set; }
         public string What { get; set; }
         internal DateTime NextDate { get; set; }

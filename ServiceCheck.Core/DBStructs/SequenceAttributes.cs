@@ -2,6 +2,7 @@
 {
     public class SequenceAttributes
     {
+        public string Owner { get; set; }
         public string SequenceName { get; set; }
         public double? MinValue { get; set; }
         public decimal? MaxValue { get; set; }

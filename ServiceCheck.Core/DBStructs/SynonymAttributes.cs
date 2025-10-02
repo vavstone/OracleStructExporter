@@ -2,6 +2,7 @@
 {
     public class SynonymAttributes
     {
+        public string Owner { get; set; }
         public string Name { get; set; }
         public string TargetSchema { get; set; }
         public string TargetObjectName { get; set; }

@@ -4,6 +4,7 @@ namespace ServiceCheck.Core
 {
     public class IndexStruct
     {
+        public string Owner { get; set; }
         public string TableName { get; set; }
         //public string TableType { get; set; }
         public string IndexName { get; set; }

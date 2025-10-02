@@ -17,25 +17,22 @@ namespace ServiceCheck.Core
         string _dbLink { get; set; }
         private ProgressDataManagerOuter _progressDataManager;
         private CancellationToken _cancellationToken;
-        private MaskForFileNames _objectNameMask;
 
 
-        public DbWorkerOuter(OracleConnection connection, string dbLink, ProgressDataManagerOuter progressDataManager, MaskForFileNames objectNameMask/*, CancellationToken cancellationToken*/)
+        public DbWorkerOuter(OracleConnection connection, string dbLink, ProgressDataManagerOuter progressDataManager/*, CancellationToken cancellationToken*/)
         {
             _connection = connection;
             _dbLink = dbLink;
             _progressDataManager = progressDataManager;
             //_cancellationToken = cancellationToken;
-            _objectNameMask = objectNameMask;
         }
 
-        public DbWorkerOuter(string connectionString, string dbLink, ProgressDataManagerOuter progressDataManager, MaskForFileNames objectNameMask/*, CancellationToken cancellationToken*/)
+        public DbWorkerOuter(string connectionString, string dbLink, ProgressDataManagerOuter progressDataManager/*, CancellationToken cancellationToken*/)
         {
             ConnectionString = connectionString;
             _dbLink = dbLink;
             _progressDataManager = progressDataManager;
             //_cancellationToken = cancellationToken;
-            _objectNameMask = objectNameMask;
         }
 
         public void SetCancellationToken(CancellationToken cancellationToken)
@@ -244,48 +241,6 @@ namespace ServiceCheck.Core
             return sourceCode.ToString();
         }
 
-        static string GetAddObjectNameMaskWhere(string fieldName, MaskForFileNames objectNameMask, bool firstInWhereBlock)
-        {
-            if (objectNameMask == null || (string.IsNullOrWhiteSpace(objectNameMask.Include) && string.IsNullOrWhiteSpace(objectNameMask.Exclude))) return "";
-            var res = "";
-            if (!string.IsNullOrWhiteSpace(objectNameMask.Include))
-            {
-                var ar = objectNameMask.Include.Trim().Split(new[] {';'}, StringSplitOptions.RemoveEmptyEntries);
-                if (ar.Any() && !string.IsNullOrWhiteSpace(ar[0]))
-                {
-                    if (firstInWhereBlock)
-                        res += " WHERE (";
-                    else
-                        res += " AND (";
-
-                    foreach (var maskItem in ar.Where(c => !string.IsNullOrWhiteSpace(c)))
-                        res += $"{fieldName} like '{maskItem}' OR ";
-
-                    res = res.Substring(0, res.Length - 4);
-                    res += ") ";
-                }
-            }
-            if (!string.IsNullOrWhiteSpace(objectNameMask.Exclude))
-            {
-                var ar = objectNameMask.Exclude.Trim().Split(new[] {';'}, StringSplitOptions.RemoveEmptyEntries);
-                if (ar.Any() && !string.IsNullOrWhiteSpace(ar[0]))
-                {
-                    if (firstInWhereBlock && string.IsNullOrWhiteSpace(res))
-                        res += " WHERE (";
-                    else
-                        res += " AND (";
-
-                    foreach (var maskItem in ar.Where(c => !string.IsNullOrWhiteSpace(c)))
-                        res += $"{fieldName} not like '{maskItem}' AND ";
-
-                    res = res.Substring(0, res.Length - 4);
-                    res += ") ";
-                }
-            }
-
-            return res;
-        }
-
         public string GetObjectQuery(List<string> objectTypesList, bool isJobs, string ownersInclude, string ownersExclude)
         {
             var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
@@ -306,7 +261,7 @@ namespace ServiceCheck.Core
             }
         }
 
-        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<SynonymAttributes>();
 
@@ -333,7 +288,7 @@ namespace ServiceCheck.Core
             _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
-                string ddlQuery = "SELECT synonym_name, table_owner, table_name, db_link  FROM user_synonyms" + GetAddObjectNameMaskWhere("synonym_name", _objectNameMask, true);
+                string ddlQuery = "SELECT synonym_name, table_owner, table_name, db_link  FROM user_synonyms";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -373,7 +328,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<SequenceAttributes> GetSequences(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<SequenceAttributes> GetSequences(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<SequenceAttributes>();
 
@@ -399,7 +354,7 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = "SELECT sequence_name, min_value, max_value, increment_by, cycle_flag, order_flag, cache_size, last_number FROM user_sequences" + GetAddObjectNameMaskWhere("sequence_name", _objectNameMask, true);
+                string ddlQuery = "SELECT sequence_name, min_value, max_value, increment_by, cycle_flag, order_flag, cache_size, last_number FROM user_sequences";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -450,7 +405,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<SchedulerJob>();
 
@@ -476,7 +431,7 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = "SELECT job_name, job_type, job_action, CAST(start_date AS DATE) start_date, repeat_interval, CAST(end_date AS DATE) end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs" + GetAddObjectNameMaskWhere("job_name", _objectNameMask, true);
+                string ddlQuery = "SELECT job_name, job_type, job_action, CAST(start_date AS DATE) start_date, repeat_interval, CAST(end_date AS DATE) end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -503,7 +458,7 @@ namespace ServiceCheck.Core
                     }
                 }
 
-                ddlQuery = $"select job_name, argument_name, argument_position, value from user_scheduler_job_args{GetAddObjectNameMaskWhere("job_name", _objectNameMask, true)} order by job_name, argument_position";
+                ddlQuery = $"select job_name, argument_name, argument_position, value from user_scheduler_job_args order by job_name, argument_position";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -546,7 +501,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<DBMSJob>();
 
@@ -613,9 +568,9 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public Dictionary<string,string> GetViews(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<DbObjectText> GetViews(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
-            var res = new Dictionary<string, string>();
+            var res = new List<DbObjectText>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
@@ -639,16 +594,21 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = "SELECT view_name, text  FROM user_views" + GetAddObjectNameMaskWhere("view_name", _objectNameMask, true);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                string ddlQuery = $"SELECT owner, view_name, text  FROM all_views{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            var name = reader["view_name"].ToString();
-                            var text = reader["text"].ToString();
-                            res[name] = text.TrimEnd();
+                            var item = new DbObjectText();
+                            item.Owner = reader["owner"].ToString();
+                            item.Name = reader["view_name"].ToString();
+                            item.Text = reader["text"].ToString().TrimEnd();
+                            res.Add(item);
                         }
                     }
                 }
@@ -677,7 +637,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<ColumnComment> GetTablesAndViewsColumnComments(ExportProgressDataStageOuter stage, int schemaObjCountPlan, out bool canceledByUser)
+        public List<ColumnComment> GetTablesAndViewsColumnComments(ExportProgressDataStageOuter stage, int schemaObjCountPlan, string schemasIncludeStr, string schemasExcludeStr, out bool canceledByUser)
         {
             var res = new List<ColumnComment>();
 
@@ -697,7 +657,10 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = @"SELECT table_name, column_name, comments  FROM USER_COL_COMMENTS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(schemasIncludeStr) ? "" : $" AND OWNER IN ({schemasIncludeStr})";
+                var strExclude = string.IsNullOrWhiteSpace(schemasExcludeStr) ? "" : $" AND OWNER NOT IN ({schemasExcludeStr})";
+                string ddlQuery = $@"SELECT owner, table_name, column_name, comments  FROM ALL_COL_COMMENTS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
 
@@ -706,6 +669,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new ColumnComment();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             item.Comments = reader["comments"].ToString();
@@ -731,7 +695,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<TableOrViewComment>();
 
@@ -756,7 +720,10 @@ namespace ServiceCheck.Core
             _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
-                string ddlQuery = @"SELECT table_name, comments  FROM USER_TAB_COMMENTS WHERE table_type=:objectType" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                string ddlQuery = $@"SELECT owner, table_name, comments  FROM ALL_TAB_COMMENTS{dbLinkAppend} WHERE table_type=:objectType{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     cmd.Parameters.Add("objectType", OracleType.VarChar).Value = objectType;
@@ -765,6 +732,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TableOrViewComment();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.Comments = reader["comments"].ToString();
                             res.Add(item);
@@ -796,7 +764,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableStruct> GetTablesStruct (ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<TableStruct> GetTablesStruct (ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<TableStruct>();
 
@@ -822,7 +790,10 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = @"SELECT table_name, partitioned, temporary, duration, compression, iot_type, logging, dependencies FROM USER_TABLES" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                string ddlQuery = $@"SELECT owner, table_name, partitioned, temporary, duration, compression, iot_type, logging, dependencies FROM ALL_TABLES{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -830,6 +801,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TableStruct();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.Partitioned = reader["partitioned"].ToString();
                             item.Temporary = reader["temporary"].ToString();
@@ -864,7 +836,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableColumnStruct> GetTablesAndViewsColumnsStruct(ExportProgressDataStageOuter stage, int schemaObjCountPlan, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
+        public List<TableColumnStruct> GetTablesAndViewsColumnsStruct(ExportProgressDataStageOuter stage, int schemaObjCountPlan, string schemasIncludeStr, string schemasExcludeStr,  Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
         {
             var res = new List<TableColumnStruct>();
 
@@ -888,7 +860,11 @@ namespace ServiceCheck.Core
                 var existsDefaultOnNullColumn = systemViewInfo["USER_TAB_COLS"].Any(c => c == "DEFAULT_ON_NULL");
                 var addDefalutOnNullSelect = existsDefaultOnNullColumn ? ", default_on_null" : "";
 
-                string ddlQuery = $@"SELECT table_name, column_name, data_type, data_type_owner, data_length, char_length,  char_col_decl_length, data_precision, data_scale, nullable, column_id, data_default, hidden_column, virtual_column, char_used{addDefalutOnNullSelect} FROM USER_TAB_COLS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(schemasIncludeStr) ? "" : $" AND OWNER IN ({schemasIncludeStr})";
+                var strExclude = string.IsNullOrWhiteSpace(schemasExcludeStr) ? "" : $" AND OWNER NOT IN ({schemasExcludeStr})";
+
+                string ddlQuery = $@"SELECT owner, table_name, column_name, data_type, data_type_owner, data_length, char_length,  char_col_decl_length, data_precision, data_scale, nullable, column_id, data_default, hidden_column, virtual_column, char_used{addDefalutOnNullSelect} FROM ALL_TAB_COLS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -896,6 +872,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TableColumnStruct();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             item.DataType = reader["data_type"].ToString();
@@ -926,7 +903,7 @@ namespace ServiceCheck.Core
 
                 if (existsIdentityColumnsView)
                 {
-                    ddlQuery = @"SELECT table_name, column_name, generation_type, identity_options FROM user_tab_identity_cols" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                    ddlQuery = $@"SELECT owner, table_name, column_name, generation_type, identity_options FROM all_tab_identity_cols{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                     using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                     {
                         using (OracleDataReader reader = cmd.ExecuteReader())
@@ -934,6 +911,7 @@ namespace ServiceCheck.Core
                             while (reader.Read())
                             {
                                 var item = new TableIdentityColumnStruct();
+                                item.Owner = reader["owner"].ToString();
                                 item.TableName = reader["table_name"].ToString();
                                 item.ColumnName = reader["column_name"].ToString();
                                 item.GenerationType = reader["generation_type"].ToString();
@@ -964,7 +942,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
+        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<PartTables>();
 
@@ -999,8 +977,11 @@ namespace ServiceCheck.Core
             {
                 //USER_PART_TABLES
                 var addIntervalColumn = existsIntervalColumn ? ", interval" : "";
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
                 string ddlQuery =
-                    $@"SELECT table_name, partitioning_type, subpartitioning_type, partition_count, def_subpartition_count, partitioning_key_count, subpartitioning_key_count, def_tablespace_name{addIntervalColumn} FROM USER_PART_TABLES{GetAddObjectNameMaskWhere("table_name", _objectNameMask, true)}";
+                    $@"SELECT owner, table_name, partitioning_type, subpartitioning_type, partition_count, def_subpartition_count, partitioning_key_count, subpartitioning_key_count, def_tablespace_name{addIntervalColumn} FROM ALL_PART_TABLES{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1008,6 +989,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new PartTables();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.PartitioningType = reader["partitioning_type"].ToString();
                             item.SubPartitioningType = reader["subpartitioning_type"].ToString();
@@ -1032,8 +1014,7 @@ namespace ServiceCheck.Core
 
                 //USER_PART_KEY_COLUMNS
                 ddlQuery =
-                    @"SELECT name, column_name, column_position FROM USER_PART_KEY_COLUMNS where object_type='TABLE'" +
-                    GetAddObjectNameMaskWhere("name", _objectNameMask, false);
+                    $@"SELECT owner, name, column_name, column_position FROM ALL_PART_KEY_COLUMNS{dbLinkAppend} where object_type='TABLE'{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1041,6 +1022,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new PartOrSubPartKeyColumns();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
@@ -1054,8 +1036,7 @@ namespace ServiceCheck.Core
 
                 //USER_SUBPART_KEY_COLUMNS
                 ddlQuery =
-                    @"SELECT name, column_name, column_position FROM USER_SUBPART_KEY_COLUMNS where object_type='TABLE'" +
-                    GetAddObjectNameMaskWhere("name", _objectNameMask, false);
+                    $@"SELECT owner, name, column_name, column_position FROM ALL_SUBPART_KEY_COLUMNS{dbLinkAppend} where object_type='TABLE'{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1063,6 +1044,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new PartOrSubPartKeyColumns();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
@@ -1078,8 +1060,7 @@ namespace ServiceCheck.Core
 
                 var addRestrStr = getPartitionMode == GetPartitionMode.ONLYDEFPART ? "partition_position=1" : "1=1";
                 ddlQuery =
-                    @"SELECT table_name, partition_name, subpartition_count, high_value, partition_position, tablespace_name FROM USER_TAB_PARTITIONS WHERE " +
-                    addRestrStr + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
+                    $@"SELECT table_owner, table_name, partition_name, subpartition_count, high_value, partition_position, tablespace_name FROM ALL_TAB_PARTITIONS{dbLinkAppend} WHERE {addRestrStr}{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1087,6 +1068,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TabPartitions();
+                            item.TableOwner = reader["table_owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.PartitionName = reader["partition_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("subpartition_count")))
@@ -1105,8 +1087,7 @@ namespace ServiceCheck.Core
                 //USER_TAB_SUBPARTITIONS
                 addRestrStr = getPartitionMode == GetPartitionMode.ONLYDEFPART ? "subpartition_position=1" : "1=1";
                 ddlQuery =
-                    @"SELECT table_name, partition_name, subpartition_name, high_value, subpartition_position, tablespace_name FROM USER_TAB_SUBPARTITIONS WHERE " +
-                    addRestrStr + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
+                    $@"SELECT table_owner, table_name, partition_name, subpartition_name, high_value, subpartition_position, tablespace_name FROM ALL_TAB_SUBPARTITIONS{dbLinkAppend} WHERE {addRestrStr}{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1114,6 +1095,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TabSubPartitions();
+                            item.TableOwner = reader["table_owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.PartitionName = reader["partition_name"].ToString();
                             item.SubPartitionName = reader["subpartition_name"].ToString();
@@ -1399,7 +1381,7 @@ namespace ServiceCheck.Core
         //    return null;
         //}
 
-        public List<IndexStruct> GetTablesIndexes(string schemaName, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<IndexStruct> GetTablesIndexes(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<IndexStruct>();
 
@@ -1425,18 +1407,21 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = @"SELECT i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality, i.ityp_owner, i.ityp_name  
-            from USER_INDEXES i 
-            LEFT JOIN USER_PART_INDEXES p ON i.TABLE_NAME=p.table_name and i.INDEX_NAME = p.INDEX_NAME
-            WHERE i.TABLE_TYPE='TABLE' and i.table_owner=:schemaName" + GetAddObjectNameMaskWhere("i.table_name", _objectNameMask, false);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                string ddlQuery = $@"SELECT i.owner, i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality, i.ityp_owner, i.ityp_name  
+            from ALL_INDEXES{dbLinkAppend} i 
+            LEFT JOIN ALL_PART_INDEXES{dbLinkAppend} p ON i.TABLE_NAME=p.table_name and i.INDEX_NAME = p.INDEX_NAME
+            WHERE i.TABLE_TYPE='TABLE'{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
-                    cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
                     using (OracleDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
                             var item = new IndexStruct();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.IndexName = reader["index_name"].ToString();
                             item.IndexType = reader["index_type"].ToString();
@@ -1452,7 +1437,7 @@ namespace ServiceCheck.Core
                         }
                     }
                 }
-                ddlQuery = @"select table_name, index_name, column_name, column_position, descend  from USER_IND_COLUMNS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                ddlQuery = $@"select table_owner, table_name, index_name, column_name, column_position, descend  from ALL_IND_COLUMNS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1460,6 +1445,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new IndexColumnStruct();
+                            item.TableOwner = reader["table_owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.IndexName = reader["index_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
@@ -1472,13 +1458,14 @@ namespace ServiceCheck.Core
                         }
                     }
                 }
-                ddlQuery = @"select table_name, index_name, column_expression, column_position from USER_IND_EXPRESSIONS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true) + " order by column_position";
+                ddlQuery = $@"select table_owner, table_name, index_name, column_expression, column_position from ALL_IND_EXPRESSIONS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
+                            var tableOwner = reader["table_owner"].ToString().ToUpper();
                             var tableName = reader["table_name"].ToString().ToUpper();
                             var indexName = reader["index_name"].ToString().ToUpper();
                             int? columnPosition = null;
@@ -1487,7 +1474,7 @@ namespace ServiceCheck.Core
                             if (columnPosition != null)
                             {
                                 var index = res.FirstOrDefault(c =>
-                                    c.TableName.ToUpper() == tableName && c.IndexName.ToUpper() == indexName);
+                                    c.Owner == tableOwner && c.TableName.ToUpper() == tableName && c.IndexName.ToUpper() == indexName);
                                 if (index != null)
                                 {
                                     var colIndex =
@@ -1523,7 +1510,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<ConstraintStruct> GetTablesConstraints(string schemaName, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<ConstraintStruct> GetTablesConstraints(string schemaName, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<ConstraintStruct>();
 
@@ -1549,7 +1536,10 @@ namespace ServiceCheck.Core
 
             try
             {
-                string ddlQuery = @"select owner, table_name, constraint_name, constraint_type, status, validated, search_condition, generated, r_owner, r_constraint_name, delete_rule from USER_CONSTRAINTS" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, true);
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                string ddlQuery = $@"select owner, table_name, constraint_name, constraint_type, status, validated, search_condition, generated, r_owner, r_constraint_name, delete_rule from ALL_CONSTRAINTS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     //cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
@@ -1573,15 +1563,15 @@ namespace ServiceCheck.Core
                         }
                     }
                 }
-                ddlQuery = @"select table_name, constraint_name, column_name, position from USER_CONS_COLUMNS WHERE owner=:schemaName" + GetAddObjectNameMaskWhere("table_name", _objectNameMask, false);
+                ddlQuery = $@"select owner, table_name, constraint_name, column_name, position from ALL_CONS_COLUMNS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
-                    cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
                     using (OracleDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
                             var item = new ConstraintColumnStruct();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.ConstraintName = reader["constraint_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
@@ -1598,7 +1588,7 @@ namespace ServiceCheck.Core
                 var outerConstraints = new List<ConstraintStruct>();
                 ddlQuery = $@"select owner, table_name, constraint_name, constraint_type, status, validated, generated, r_owner, r_constraint_name, delete_rule from ALL_CONSTRAINTS
                             where (owner,constraint_name) in 
-                            (select r_owner, r_constraint_name from USER_CONSTRAINTS{GetAddObjectNameMaskWhere("table_name", _objectNameMask, true)})";
+                            (select r_owner, r_constraint_name from USER_CONSTRAINTS)";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     //cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
@@ -1625,7 +1615,7 @@ namespace ServiceCheck.Core
                             where (owner,table_name,constraint_name) in 
                             (select owner, table_name, constraint_name from ALL_CONSTRAINTS
                             where (owner,constraint_name) in 
-                            (select r_owner, r_constraint_name from USER_CONSTRAINTS{GetAddObjectNameMaskWhere("table_name", _objectNameMask, true)}))";
+                            (select r_owner, r_constraint_name from USER_CONSTRAINTS))";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     //cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
@@ -1683,9 +1673,9 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public Dictionary<string, string> GetObjectsSourceByType(string objectType, string schemaName,ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<DbObjectText> GetObjectsSourceByType(string objectType, string schemaName,ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string schemasIncludeStr, string schemasExcludeStr,  out bool canceledByUser)
         {
-            var res = new Dictionary<string, string>();
+            var res = new List<DbObjectText>();
 
             if (_cancellationToken.IsCancellationRequested)
             {
@@ -1709,12 +1699,13 @@ namespace ServiceCheck.Core
 
             try
             {
-                var sourceQuery = string.Format(@"SELECT name, text, line
-                FROM user_source 
-                WHERE type = :objectType {0} 
-                ORDER BY name, line", GetAddObjectNameMaskWhere("name", _objectNameMask, false));
-
-                StringBuilder sourceCode = new StringBuilder();
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                var strInclude = string.IsNullOrWhiteSpace(schemasIncludeStr) ? "" : $" AND OWNER IN ({schemasIncludeStr})";
+                var strExclude = string.IsNullOrWhiteSpace(schemasExcludeStr) ? "" : $" AND OWNER NOT IN ({schemasExcludeStr})";
+                var sourceQuery =
+                    $"SELECT owner, name, text, line FROM all_source{dbLinkAppend} WHERE type = :objectType{strInclude}{strExclude}";
+                var linesAr = new List<DbObjectTextByLines>();
+                
 
                 using (OracleCommand cmd = new OracleCommand(sourceQuery, _connection))
                 {
@@ -1725,38 +1716,47 @@ namespace ServiceCheck.Core
                         var curObjName = "";
                         while (reader.Read())
                         {
-                            if (!string.IsNullOrWhiteSpace(curObjName) && curObjName != reader["name"].ToString())
-                            {
-                                res[curObjName] = sourceCode.ToString();
-                                sourceCode.Clear();
-                                curObjName = reader["name"].ToString();
-                            }
-                            else if (string.IsNullOrWhiteSpace(curObjName))
-                                curObjName = reader["name"].ToString();
-
-                            var text = reader["text"].ToString();
+                            var newItem = new DbObjectTextByLines();
+                            newItem.Owner = reader["owner"].ToString();
+                            newItem.Name = reader["name"].ToString();
+                            newItem.Text = reader["text"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("line")))
                             {
-                                var line = reader.GetInt32(reader.GetOrdinal("line"));
-                                if (line == 1)
+                                newItem.Line = reader.GetInt32(reader.GetOrdinal("line"));
+                                if (newItem.Line == 1)
                                 {
                                     //иногда в первой строке встречается имя схемы, например:
                                     //TRIGGER MCA_FLEX.NEWDOCUM
                                     //или
                                     //TRIGGER "MCA_FLEX".tiVIS_ASKTS4_CONTROLS BEFORE INSERT ON VIS_ASKTS4_CONTROLS
-                                    if (text.Contains(schemaName))
+                                    if (newItem.Text.Contains(schemaName))
                                     {
-                                        text = text.Replace($" {schemaName}.", " ").Replace($@" ""{schemaName}"".", " ");
+                                        newItem.Text = newItem.Text.Replace($" {schemaName}.", " ")
+                                            .Replace($@" ""{schemaName}"".", " ");
                                     }
                                 }
                             }
 
-                            sourceCode.Append(text);
+                            linesAr.Add(newItem);
                         }
-
-                        if (!string.IsNullOrWhiteSpace(curObjName))
-                            res[curObjName] = sourceCode.ToString();
-
+                    }
+                }
+                StringBuilder sourceCode = new StringBuilder();
+                foreach (var owner in linesAr.GroupBy(c=>c.Owner))
+                {
+                    foreach (var name in  owner.GroupBy(c=>c.Name))
+                    {
+                        foreach (var item in name.OrderBy(c=>c.Line))
+                        {
+                            sourceCode.Append(item.Text);
+                        }
+                        res.Add(new DbObjectText
+                        {
+                            Owner = owner.Key,
+                            Name = name.Key,
+                            Text = sourceCode.ToString()
+                        });
+                        sourceCode.Clear();
                     }
                 }
             }
@@ -1844,7 +1844,7 @@ namespace ServiceCheck.Core
         }
 
 
-        public DbLinkAttrigutes GetDbLink(string dbLinkName, ExportProgressDataStageOuter stage, out bool canceledByUser)
+        public DbLinkAttrigutes GetCurDbLink(string dbLinkName, ExportProgressDataStageOuter stage, out bool canceledByUser)
         {
             if (_cancellationToken.IsCancellationRequested)
             {
@@ -1892,7 +1892,7 @@ namespace ServiceCheck.Core
             return null;
         }
 
-        public string GetObjectDdl(string objectTypeMulti, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
+        public string GetObjectDdl(string objectTypeMulti, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var ddl = "";
             string ddlQuery = @"

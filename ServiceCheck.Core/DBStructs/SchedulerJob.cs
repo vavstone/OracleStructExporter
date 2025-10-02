@@ -5,6 +5,7 @@ namespace ServiceCheck.Core.DBStructs
 {
     public class SchedulerJob
     {
+        public string Owner { get; set; }
         public string JobName { get; set; }
         public string JobType { get; set; }
         public string JobAction { get; set; }

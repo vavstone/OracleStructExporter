@@ -4,6 +4,7 @@ namespace ServiceCheck.Core
 {
     public class PartTables
     {
+        public string Owner { get; set; }
         public string TableName { get; set; }
         public string PartitioningType { get; set; }
         public string SubPartitioningType { get; set; }
@@ -16,6 +17,5 @@ namespace ServiceCheck.Core
         public List<PartOrSubPartKeyColumns> PartKeyColumns { get; set; } = new List<PartOrSubPartKeyColumns>();
         public List<PartOrSubPartKeyColumns> SubPartKeyColumns { get; set; } = new List<PartOrSubPartKeyColumns>();
         public List<TabPartitions> Partitions { get; set; } = new List<TabPartitions>();
-        
     }
 }

@@ -397,18 +397,18 @@ namespace ServiceCheck.Core
             List<ColumnComment> columnsComments,
             List<PartTables> partTables,
             string objectName,
-            string schemaName,
+            string owner,
             List<string> addSlashTo)
         {
             var objectNameUpper = objectName.ToUpper();
-            var curTableStruct = tablesStructs.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper);
+            var curTableStruct = tablesStructs.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
             var curTableColumnsStruct =
-                tablesColumnsStructs.Where(c => c.TableName.ToUpper() == objectNameUpper).ToList();
-            var curTableComment = tableComments.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper);
-            var curTableColumnsComments = columnsComments.Where(c => c.TableName.ToUpper() == objectNameUpper).ToList();
-            var curTableConstraints = tablesConstraints.Where(c => c.TableName.ToUpper() == objectNameUpper).ToList();
-            var curTableIndexes = tablesIndexes.Where(c => c.TableName.ToUpper() == objectNameUpper).ToList();
-            var curPartTable = partTables.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper);
+                tablesColumnsStructs.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner)).ToList();
+            var curTableComment = tableComments.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
+            var curTableColumnsComments = columnsComments.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner)).ToList();
+            var curTableConstraints = tablesConstraints.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner == owner)).ToList();
+            var curTableIndexes = tablesIndexes.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner)).ToList();
+            var curPartTable = partTables.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
 
             BindConstraintsColumnsAndIndexes(curTableConstraints, curTableColumnsStruct, curTableIndexes);
 
@@ -581,7 +581,7 @@ namespace ServiceCheck.Core
             {
                 sb.Append(",");
                 sb.AppendLine("");
-                sb.Append(" " + GetContstraintText(constraint, tablesConstraints, schemaName));
+                sb.Append(" " + GetContstraintText(constraint, tablesConstraints, owner));
             }
 
             sb.AppendLine();
@@ -771,7 +771,7 @@ namespace ServiceCheck.Core
                 sb.AppendLine("");
                 sb.AppendLine($"alter table {objectNameUpper}");
                 sb.Append("  add");
-                sb.Append(GetContstraintText(constraint, tablesConstraints, schemaName));
+                sb.Append(GetContstraintText(constraint, tablesConstraints, owner));
                 sb.Append(";");
                 if (constraint.BindedIndexStruct != null && constraint.BindedIndexStruct.Logging == "NO")
                 {
@@ -805,8 +805,18 @@ namespace ServiceCheck.Core
         public static string GetObjectDdlForView(Dictionary<string, string> views, List<TableColumnStruct> columnsStructs, List<TableOrViewComment> viewComments,
             List<ColumnComment> columnsComments, string objectName, List<string> addSlashTo)
         {
+            return GetObjectDdlForView(
+                views.Select(c => new DbObjectText {Name = c.Key, Text = c.Value}).ToList(), columnsStructs, viewComments, columnsComments, null, objectName, addSlashTo);
+        }
+
+        public static string GetObjectDdlForView(List<DbObjectText> views, List<TableColumnStruct> columnsStructs, List<TableOrViewComment> viewComments,
+            List<ColumnComment> columnsComments, string owner, string objectName, List<string> addSlashTo)
+        {
             var objectNameUpper = objectName.ToUpper();
-            var viewText = views[objectName];
+            var item = views.FirstOrDefault(c =>
+                c.Name == objectName && (c.Owner == owner || string.IsNullOrWhiteSpace(owner)));
+            if (item==null || string.IsNullOrWhiteSpace(item.Text)) return String.Empty;
+            var viewText = item.Text;
 
             var curViewColumnsStruct =
                 columnsStructs.Where(c => c.TableName.ToUpper() == objectNameUpper).ToList();
@@ -851,9 +861,9 @@ namespace ServiceCheck.Core
             return sb.ToString();
         }
 
-        public static string GetObjectDdlForSequence(List<SequenceAttributes> sequenceAttributesList, string objectName, bool resetStartValueTo1, List<string> addSlashTo)
+        public static string GetObjectDdlForSequence(List<SequenceAttributes> sequenceAttributesList, string owner, string objectName, bool resetStartValueTo1, List<string> addSlashTo)
         {
-            var attributes = sequenceAttributesList.FirstOrDefault(c => c.SequenceName.ToUpper() == objectName.ToUpper());
+            var attributes = sequenceAttributesList.FirstOrDefault(c => c.SequenceName.ToUpper() == objectName.ToUpper() && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
 
             var sb = new StringBuilder($"create sequence {objectName.ToUpper()}");
             if (attributes.MinValue != null)
@@ -900,9 +910,9 @@ namespace ServiceCheck.Core
             return sb.ToString();
         }
 
-        public static string GetObjectDdlForSynonym(List<SynonymAttributes> synonymAttributesList, string objectName, List<string> addSlashTo)
+        public static string GetObjectDdlForSynonym(List<SynonymAttributes> synonymAttributesList, string owner, string objectName, List<string> addSlashTo)
         {
-            var attributes = synonymAttributesList.First(c => c.Name.ToUpper() == objectName.ToUpper());
+            var attributes = synonymAttributesList.First(c => c.Name.ToUpper() == objectName.ToUpper() && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
             var objectOwnerAddStr = "";
             if (!string.IsNullOrWhiteSpace(attributes.TargetSchema))
                 objectOwnerAddStr += attributes.TargetSchema + ".";
@@ -915,25 +925,48 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public static string GetObjectDdlForSourceText(Dictionary<string, string> funcText, string objectName, string objectType, List<string> addSlashTo)
+        public static string GetObjectDdlForSourceText(Dictionary<string, string> sourceText, string objectName, string objectType, List<string> addSlashTo)
+        {
+
+            return GetObjectDdlForSourceText(
+                sourceText.Select(c => new DbObjectText {Name = c.Key, Text = c.Value}).ToList(), null, objectName, objectType,
+                addSlashTo);
+        }
+
+        public static string GetObjectDdlForSourceText(List<DbObjectText> sourceText, string owner, string objectName, string objectType, List<string> addSlashTo)
         {
 
             var ddl = new StringBuilder();
-            var inText = funcText[objectName];
-            ddl.Append(AddCreateOrReplace(inText));
-            var addsplitter = addSlashTo.Contains(objectType);
-            if (addsplitter)
+            var item = sourceText.FirstOrDefault(c =>
+                c.Name == objectName && (c.Owner == owner || string.IsNullOrWhiteSpace(owner)));
+            if (item != null)
             {
-                ddl.AppendLine();
-                ddl.Append("/");
+                ddl.Append(AddCreateOrReplace(item.Text));
+                var addsplitter = addSlashTo.Contains(objectType);
+                if (addsplitter)
+                {
+                    ddl.AppendLine();
+                    ddl.Append("/");
+                }
             }
+
             return ddl.ToString();
         }
 
         public static string GetObjectDdlForPackageHeader(Dictionary<string, string> packagesHeaders, string objectName, List<string> addSlashTo)
         {
+            return GetObjectDdlForPackageHeader(
+                packagesHeaders.Select(c => new DbObjectText {Name = c.Key, Text = c.Value}).ToList(), null, objectName,
+                addSlashTo);
+        }
+
+        public static string GetObjectDdlForPackageHeader(List<DbObjectText> packagesHeaders, string owner, string objectName, List<string> addSlashTo)
+        {
             var ddl = new StringBuilder();
-            var headerText = packagesHeaders.ContainsKey(objectName) ? packagesHeaders[objectName] : string.Empty;
+            var item = packagesHeaders.FirstOrDefault(c =>
+                c.Name == objectName && (c.Owner == owner || string.IsNullOrWhiteSpace(owner)));
+
+            var headerText = item != null ? item.Text : string.Empty;
             var header = AddCreateOrReplace(headerText);
             if (!string.IsNullOrWhiteSpace(header))
             {
@@ -950,9 +983,18 @@ namespace ServiceCheck.Core
 
         public static string GetObjectDdlForPackageBody(Dictionary<string, string> packagesBodies, string objectName, List<string> addSlashTo)
         {
+            return GetObjectDdlForPackageBody(
+                packagesBodies.Select(c => new DbObjectText {Name = c.Key, Text = c.Value}).ToList(), null, objectName,
+                addSlashTo);
+        }
+
+        public static string GetObjectDdlForPackageBody(List<DbObjectText> packagesBodies, string owner, string objectName, List<string> addSlashTo)
+        {
             var ddl = new StringBuilder();
-            var bodyText = packagesBodies.ContainsKey(objectName) ? packagesBodies[objectName] : string.Empty;
-            var body = AddCreateOrReplace(bodyText);
+            var item = packagesBodies.FirstOrDefault(c =>
+                c.Name == objectName && (c.Owner == owner || string.IsNullOrWhiteSpace(owner)));
+
+            var body = item != null ? item.Text : string.Empty;
             if (!string.IsNullOrWhiteSpace(body))
             {
                 ddl.Append(body);

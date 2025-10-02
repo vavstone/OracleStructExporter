@@ -2,6 +2,7 @@
 {
     public class TabSubPartitions
     {
+        public string TableOwner { get; set; }
         public string TableName { get; set; }
         public string PartitionName { get; set; }
         public string SubPartitionName { get; set; }

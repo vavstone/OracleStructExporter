@@ -2,6 +2,7 @@
 {
     public class TableStruct
     {
+        public string Owner { get; set; }
         public string TableName { get; set; }
         public string Partitioned { get; set; }
         public string Temporary { get; set; }
