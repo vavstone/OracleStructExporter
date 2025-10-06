@@ -111,6 +111,7 @@ namespace ServiceCheck.Core
                 foreach (var item in items)
                 {
                     var type = item.ObjectType == "PACKAGE BODY" ? "PACKAGE" : item.ObjectType;
+                    type = GetObjectTypeNameReverse(type);
                     ObjectTypeNames resItem = res.FirstOrDefault(c =>
                         c.SchemaName == item.SchemaName && c.ObjectType == type);
                     if (resItem == null)
@@ -133,7 +134,7 @@ namespace ServiceCheck.Core
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             var counter = res.Sum(c => c.ObjectNames.Count);
-            progressData2.SchemaObjCountPlan = counter;
+            progressData2.AllObjCountPlan = counter;
             progressData2.MetaObjCountFact = counter;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
@@ -161,6 +162,11 @@ namespace ServiceCheck.Core
             return objectTypeMapping[objectTypeCommonName];
         }
 
+        public static string GetObjectTypeNameReverse(string typeName)
+        {
+            return objectTypeMapping.FirstOrDefault(c => c.Value==typeName).Key;
+        }
+
         public string GetObjectSource(string objectName, string objectType, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current,out bool canceledByUser)
         {
             string dbObjectType = GetObjectTypeName(objectType);
@@ -176,7 +182,7 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
                 progressDataCancel.Current = current;
                 progressDataCancel.ObjectName = objectName;
@@ -187,7 +193,7 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
             progressData.Current = current;
             progressData.ObjectName = objectName;
@@ -220,7 +226,7 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
                 progressDataErr.Current = current;
                 progressDataErr.ObjectName = objectName;
@@ -230,7 +236,7 @@ namespace ServiceCheck.Core
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = 1;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
             progressData2.Current = current;
             progressData2.ObjectName = objectName;
@@ -256,12 +262,12 @@ namespace ServiceCheck.Core
                 var strIncludeForDBMSJob = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND schema_user IN ({ownersInclude})";
                 var strExcludeForDBMSJob = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND schema_user NOT IN ({ownersExclude})";
                 return $"SELECT owner, 'SCHEDULER_JOB' object_type, job_name object_name FROM all_scheduler_jobs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}" +
-                       "UNION ALL" +
+                       "UNION ALL " +
                        $"SELECT schema_user owner, 'DBMS_JOB' object_type, to_char(job) object_name from all_jobs{dbLinkAppend} WHERE 1=1{strIncludeForDBMSJob}{strExcludeForDBMSJob}";
             }
         }
 
-        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<SynonymAttributes>();
 
@@ -270,9 +276,8 @@ namespace ServiceCheck.Core
                 canceledByUser = true;
 
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
 
@@ -281,14 +286,16 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
-                string ddlQuery = "SELECT synonym_name, table_owner, table_name, db_link  FROM user_synonyms";
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND owner IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND owner NOT IN ({ownersExclude})";
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                string ddlQuery = $"SELECT owner, synonym_name, table_owner, table_name, db_link  FROM all_synonyms{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -310,25 +317,23 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<SequenceAttributes> GetSequences(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<SequenceAttributes> GetSequences(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<SequenceAttributes>();
 
@@ -336,9 +341,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -346,15 +350,17 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
             {
-                string ddlQuery = "SELECT sequence_name, min_value, max_value, increment_by, cycle_flag, order_flag, cache_size, last_number FROM user_sequences";
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND sequence_owner IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND sequence_owner NOT IN ({ownersExclude})";
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                string ddlQuery = $"SELECT sequence_owner, sequence_name, min_value, max_value, increment_by, cycle_flag, order_flag, cache_size, last_number FROM all_sequences{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -362,6 +368,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SequenceAttributes();
+                            item.SequenceOwner = reader["sequence_owner"].ToString();
                             item.SequenceName = reader["sequence_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("min_value")))
                                 item.MinValue = reader.GetDouble(reader.GetOrdinal("min_value"));
@@ -387,25 +394,23 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<SchedulerJob>();
 
@@ -413,9 +418,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -423,15 +427,17 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
             {
-                string ddlQuery = "SELECT job_name, job_type, job_action, CAST(start_date AS DATE) start_date, repeat_interval, CAST(end_date AS DATE) end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM user_scheduler_jobs";
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND owner IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND owner NOT IN ({ownersExclude})";
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                string ddlQuery = $"SELECT owner, job_name, job_type, job_action, CAST(start_date AS DATE) start_date, repeat_interval, CAST(end_date AS DATE) end_date, job_class, enabled, auto_drop, comments, number_of_arguments FROM all_scheduler_jobs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -439,6 +445,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SchedulerJob();
+                            item.Owner = reader["owner"].ToString();
                             item.JobName = reader["job_name"].ToString();
                             item.JobType = reader["job_type"].ToString();
                             item.JobAction = reader["job_action"].ToString();
@@ -458,7 +465,7 @@ namespace ServiceCheck.Core
                     }
                 }
 
-                ddlQuery = $"select job_name, argument_name, argument_position, value from user_scheduler_job_args order by job_name, argument_position";
+                ddlQuery = $"select owner, job_name, argument_name, argument_position, value from all_scheduler_job_args{dbLinkAppend} WHERE 1=1{strInclude}{strExclude} order by owner, job_name, argument_position";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -466,6 +473,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SchedulerJobArgument();
+                            item.Owner = reader["owner"].ToString();
                             item.JobName = reader["job_name"].ToString();
                             item.ArgumentName = reader["argument_name"].ToString();
                             item.ArgumentPosition = reader.GetInt32(reader.GetOrdinal("argument_position"));
@@ -483,25 +491,23 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<DBMSJob>();
 
@@ -509,9 +515,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
 
@@ -520,14 +525,16 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
             try
             {
-                string ddlQuery = "select job, what, next_date, next_sec, interval from user_jobs";
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND schema_user IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND schema_user NOT IN ({ownersExclude})";
+                var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+                string ddlQuery = $"select schema_user, job, what, next_date, next_sec, interval from all_jobs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -535,6 +542,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new DBMSJob();
+                            item.SchemaUser = reader["schema_user"].ToString();
                             item.Job = reader.GetInt32(reader.GetOrdinal("job"));
                             item.What = reader["what"].ToString();
                             item.Interval = reader["interval"].ToString();
@@ -550,25 +558,23 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<DbObjectText> GetViews(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<DbObjectText> GetViews(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<DbObjectText>();
 
@@ -576,9 +582,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -586,9 +591,8 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
@@ -619,18 +623,16 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
@@ -645,14 +647,14 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
@@ -683,19 +685,19 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan,  string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<TableOrViewComment>();
 
@@ -703,9 +705,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -713,9 +714,8 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
             try
@@ -745,18 +745,16 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
@@ -764,7 +762,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableStruct> GetTablesStruct (ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<TableStruct> GetTablesStruct (ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<TableStruct>();
 
@@ -772,9 +770,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -782,9 +779,8 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
@@ -820,17 +816,15 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
             return res;
@@ -844,14 +838,14 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
@@ -930,19 +924,19 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan,  string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<PartTables>();
 
@@ -952,9 +946,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -965,9 +958,8 @@ namespace ServiceCheck.Core
                 return res;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
@@ -1027,7 +1019,7 @@ namespace ServiceCheck.Core
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
                                 item.ColumnPosition = reader.GetInt32(reader.GetOrdinal("column_position"));
-                            var table = res.FirstOrDefault(c => c.TableName == item.TableName);
+                            var table = res.FirstOrDefault(c =>c.Owner == item.Owner &&  c.TableName == item.TableName);
                             if (table != null)
                                 table.PartKeyColumns.Add(item);
                         }
@@ -1049,7 +1041,7 @@ namespace ServiceCheck.Core
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
                                 item.ColumnPosition = reader.GetInt32(reader.GetOrdinal("column_position"));
-                            var table = res.FirstOrDefault(c => c.TableName == item.TableName);
+                            var table = res.FirstOrDefault(c => c.Owner == item.Owner && c.TableName == item.TableName);
                             if (table != null)
                                 table.SubPartKeyColumns.Add(item);
                         }
@@ -1057,7 +1049,8 @@ namespace ServiceCheck.Core
                 }
 
                 //USER_TAB_PARTITIONS
-
+                strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND table_owner IN ({ownersInclude})";
+                strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND table_owner NOT IN ({ownersExclude})";
                 var addRestrStr = getPartitionMode == GetPartitionMode.ONLYDEFPART ? "partition_position=1" : "1=1";
                 ddlQuery =
                     $@"SELECT table_owner, table_name, partition_name, subpartition_count, high_value, partition_position, tablespace_name FROM ALL_TAB_PARTITIONS{dbLinkAppend} WHERE {addRestrStr}{strInclude}{strExclude}";
@@ -1077,7 +1070,7 @@ namespace ServiceCheck.Core
                             if (!reader.IsDBNull(reader.GetOrdinal("partition_position")))
                                 item.PartitionPosition = reader.GetInt32(reader.GetOrdinal("partition_position"));
                             item.TableSpaceName = reader["tablespace_name"].ToString();
-                            var table = res.FirstOrDefault(c => c.TableName == item.TableName);
+                            var table = res.FirstOrDefault(c => c.Owner == item.TableOwner &&  c.TableName == item.TableName);
                             if (table != null)
                                 table.Partitions.Add(item);
                         }
@@ -1104,7 +1097,7 @@ namespace ServiceCheck.Core
                                 item.SubPartitionPosition =
                                     reader.GetInt32(reader.GetOrdinal("subpartition_position"));
                             item.TableSpaceName = reader["tablespace_name"].ToString();
-                            var table = res.FirstOrDefault(c => c.TableName == item.TableName);
+                            var table = res.FirstOrDefault(c => c.Owner == item.TableOwner && c.TableName == item.TableName);
                             if (table != null)
                             {
                                 var partition =
@@ -1122,18 +1115,16 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
@@ -1221,7 +1212,7 @@ namespace ServiceCheck.Core
             try
             {
                 string ddlQuery =
-                    $@"select process_id, dbid, username, stage, eventlevel, eventtime, errorscount, schemaobjcountfact
+                    $@"select process_id, dbid, username, dblink, stage, eventlevel, eventtime, errorscount, schemaobjcountfact
                     from {prefix}CONNWORKLOG where stage='PROCESS_SCHEMA' --and eventlevel='STAGEENDINFO'
                     and 
                     process_id in (select process_id from {prefix}CONNWORKLOG where stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and sysdate-eventtime<:forLastDays)";
@@ -1244,6 +1235,7 @@ namespace ServiceCheck.Core
                                     item.ProcessId = reader.GetInt32(reader.GetOrdinal("process_id"));
                                     item.DBId = reader["dbid"].ToString().ToUpper();
                                     item.UserName = reader["username"].ToString().ToUpper();
+                                    item.DbLink = reader["dblink"].ToString().ToUpper();
                                     item.Stage = stage;
                                     item.Level = level;
                                     item.EventTime = reader.GetDateTime(reader.GetOrdinal("eventtime"));
@@ -1347,41 +1339,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
-        //{
-        //    try
-        //    {
-        //        string ddlQuery =
-        //            @"select max(eventtime) max_eventtime from OSECACONNWORKLOG where upper(dbid)=:dbid and upper(username)=:username
-        //                            and stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and errorscount=0";
-        //        using (OracleConnection connection = new OracleConnection(ConnectionString))
-        //        {
-        //            connection.Open();
-        //            using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
-        //            {
-        //                cmd.Parameters.Add("dbid", OracleType.VarChar).Value = dbidC.ToUpper();
-        //                cmd.Parameters.Add("username", OracleType.VarChar).Value = username.ToUpper();
-        //                using (OracleDataReader reader = cmd.ExecuteReader())
-        //                {
-        //                    if (reader.Read())
-        //                    {
-        //                        if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
-        //                            return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
-        //                        return null;
-        //                    }
-        //                }
-        //            }
-        //        }
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        throw e;
-        //    }
-
-        //    return null;
-        //}
-
-        public List<IndexStruct> GetTablesIndexes(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<IndexStruct> GetTablesIndexes(ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
         {
             var res = new List<IndexStruct>();
 
@@ -1389,9 +1347,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -1399,20 +1356,19 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
             {
                 var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
-                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
-                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND i.OWNER IN ({ownersInclude})";
+                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND i.OWNER NOT IN ({ownersExclude})";
                 string ddlQuery = $@"SELECT i.owner, i.table_name, i.index_name, i.index_type, i.uniqueness, i.compression, i.prefix_length, i.logging, p.locality, i.ityp_owner, i.ityp_name  
             from ALL_INDEXES{dbLinkAppend} i 
-            LEFT JOIN ALL_PART_INDEXES{dbLinkAppend} p ON i.TABLE_NAME=p.table_name and i.INDEX_NAME = p.INDEX_NAME
+            LEFT JOIN ALL_PART_INDEXES{dbLinkAppend} p ON i.owner=p.owner and i.TABLE_NAME=p.table_name and i.INDEX_NAME = p.INDEX_NAME
             WHERE i.TABLE_TYPE='TABLE'{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
@@ -1437,6 +1393,8 @@ namespace ServiceCheck.Core
                         }
                     }
                 }
+                strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND table_owner IN ({ownersInclude})";
+                strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND table_owner NOT IN ({ownersExclude})";
                 ddlQuery = $@"select table_owner, table_name, index_name, column_name, column_position, descend  from ALL_IND_COLUMNS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
@@ -1452,7 +1410,7 @@ namespace ServiceCheck.Core
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
                                 item.ColumnPosition = reader.GetInt32(reader.GetOrdinal("column_position"));
                             item.Descend = reader["descend"].ToString();
-                            var index = res.FirstOrDefault(c => c.TableName.ToUpper() == item.TableName.ToUpper() && c.IndexName.ToUpper() == item.IndexName.ToUpper());
+                            var index = res.FirstOrDefault(c => c.Owner == item.TableOwner &&  c.TableName == item.TableName && c.IndexName == item.IndexName);
                             if (index != null)
                                 index.IndexColumnStructs.Add(item);
                         }
@@ -1492,25 +1450,23 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<ConstraintStruct> GetTablesConstraints(string schemaName, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public List<ConstraintStruct> GetTablesConstraints(/*string schemaName, */ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti,/* string ownersInclude, string ownersExclude, */out bool canceledByUser)
         {
             var res = new List<ConstraintStruct>();
 
@@ -1518,9 +1474,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -1528,18 +1483,17 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
             {
                 var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
-                var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
-                var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
-                string ddlQuery = $@"select owner, table_name, constraint_name, constraint_type, status, validated, search_condition, generated, r_owner, r_constraint_name, delete_rule from ALL_CONSTRAINTS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
+                //var strInclude = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND OWNER IN ({ownersInclude})";
+                //var strExclude = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND OWNER NOT IN ({ownersExclude})";
+                string ddlQuery = $@"select owner, table_name, constraint_name, constraint_type, status, validated, search_condition, generated, r_owner, r_constraint_name, delete_rule from ALL_CONSTRAINTS{dbLinkAppend}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     //cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
@@ -1563,7 +1517,7 @@ namespace ServiceCheck.Core
                         }
                     }
                 }
-                ddlQuery = $@"select owner, table_name, constraint_name, column_name, position from ALL_CONS_COLUMNS{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
+                ddlQuery = $@"select owner, table_name, constraint_name, column_name, position from ALL_CONS_COLUMNS{dbLinkAppend}";
                 using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
                 {
                     using (OracleDataReader reader = cmd.ExecuteReader())
@@ -1577,103 +1531,44 @@ namespace ServiceCheck.Core
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("position")))
                                 item.Position = reader.GetInt32(reader.GetOrdinal("position"));
-                            var constraint = res.FirstOrDefault(c => c.TableName.ToUpper() == item.TableName.ToUpper() && c.ConstraintName.ToUpper() == item.ConstraintName.ToUpper());
+                            var constraint = res.FirstOrDefault(c => c.Owner == item.Owner && c.TableName == item.TableName && c.ConstraintName == item.ConstraintName);
                             if (constraint != null)
                                 constraint.ConstraintColumnStructs.Add(item);
                         }
                     }
                 }
 
-                //внешние ключи
-                var outerConstraints = new List<ConstraintStruct>();
-                ddlQuery = $@"select owner, table_name, constraint_name, constraint_type, status, validated, generated, r_owner, r_constraint_name, delete_rule from ALL_CONSTRAINTS
-                            where (owner,constraint_name) in 
-                            (select r_owner, r_constraint_name from USER_CONSTRAINTS)";
-                using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
+                foreach (var constraint in res.Where(c => !string.IsNullOrWhiteSpace(c.RConstraintName)))
                 {
-                    //cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
-                    using (OracleDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var item = new ConstraintStruct();
-                            item.Owner = reader["owner"].ToString();
-                            item.TableName = reader["table_name"].ToString();
-                            item.ConstraintName = reader["constraint_name"].ToString();
-                            item.ConstraintType = reader["constraint_type"].ToString();
-                            item.Status = reader["status"].ToString();
-                            item.Validated = reader["validated"].ToString();
-                            item.Generated = reader["generated"].ToString();
-                            item.ROwner = reader["r_owner"].ToString();
-                            item.RConstraintName = reader["r_constraint_name"].ToString();
-                            item.DeleteRule = reader["delete_rule"].ToString();
-                            outerConstraints.Add(item);
-                        }
-                    }
-                }
-                ddlQuery = $@"select table_name, constraint_name, column_name, position from ALL_CONS_COLUMNS
-                            where (owner,table_name,constraint_name) in 
-                            (select owner, table_name, constraint_name from ALL_CONSTRAINTS
-                            where (owner,constraint_name) in 
-                            (select r_owner, r_constraint_name from USER_CONSTRAINTS))";
-                using (OracleCommand cmd = new OracleCommand(ddlQuery, _connection))
-                {
-                    //cmd.Parameters.Add("schemaName", OracleType.VarChar).Value = schemaName.ToUpper();
-                    using (OracleDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var item = new ConstraintColumnStruct();
-                            item.TableName = reader["table_name"].ToString();
-                            item.ConstraintName = reader["constraint_name"].ToString();
-                            item.ColumnName = reader["column_name"].ToString();
-                            if (!reader.IsDBNull(reader.GetOrdinal("position")))
-                                item.Position = reader.GetInt32(reader.GetOrdinal("position"));
-                            var constraint = outerConstraints.FirstOrDefault(c => c.TableName.ToUpper() == item.TableName.ToUpper() && c.ConstraintName.ToUpper() == item.ConstraintName.ToUpper());
-                            if (constraint != null)
-                                constraint.ConstraintColumnStructs.Add(item);
-                        }
-                    }
-                }
 
-                foreach (var constraint in res.Where(c=>!string.IsNullOrWhiteSpace(c.RConstraintName)))
-                {
-                    //var outerConstraint = res.FirstOrDefault(c =>
-                    //    c.ConstraintName.ToUpper() == constraint.RConstraintName.ToUpper() && (string.IsNullOrWhiteSpace(constraint.ROwner) || c.Owner.ToUpper() == constraint.ROwner.ToUpper()));
-                    //if (outerConstraint == null)
-                    //{
-                        var outerConstraint = outerConstraints.FirstOrDefault(c =>
-                            c.ConstraintName.ToUpper() == constraint.RConstraintName.ToUpper() && (string.IsNullOrWhiteSpace(constraint.ROwner) || c.Owner.ToUpper() == constraint.ROwner.ToUpper()));
-                    //}
-
+                    var outerConstraint = res.FirstOrDefault(c =>
+                        c.ConstraintName == constraint.RConstraintName &&
+                        (string.IsNullOrWhiteSpace(constraint.ROwner) || c.Owner == constraint.ROwner));
                     constraint.ReferenceConstraint = outerConstraint;
                 }
-                
             }
             catch (Exception e)
             {
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
         }
 
-        public List<DbObjectText> GetObjectsSourceByType(string objectType, string schemaName,ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string schemasIncludeStr, string schemasExcludeStr,  out bool canceledByUser)
+        public List<DbObjectText> GetObjectsSourceByType(string objectType, /*string schemaName,*/ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, string objectTypeMulti, string schemasIncludeStr, string schemasExcludeStr,  out bool canceledByUser)
         {
             var res = new List<DbObjectText>();
 
@@ -1681,9 +1576,8 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
-                progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
@@ -1691,9 +1585,8 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
-            progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData);
 
@@ -1723,7 +1616,9 @@ namespace ServiceCheck.Core
                             if (!reader.IsDBNull(reader.GetOrdinal("line")))
                             {
                                 newItem.Line = reader.GetInt32(reader.GetOrdinal("line"));
-                                if (newItem.Line == 1)
+
+                                //пока уберем эту возможность, позже возможно вернемся
+                                /*if (newItem.Line == 1)
                                 {
                                     //иногда в первой строке встречается имя схемы, например:
                                     //TRIGGER MCA_FLEX.NEWDOCUM
@@ -1734,7 +1629,7 @@ namespace ServiceCheck.Core
                                         newItem.Text = newItem.Text.Replace($" {schemaName}.", " ")
                                             .Replace($@" ""{schemaName}"".", " ");
                                     }
-                                }
+                                }*/
                             }
 
                             linesAr.Add(newItem);
@@ -1765,17 +1660,15 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
-                progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
-            progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
             _progressDataManager.ReportCurrentProgress(progressData2);
             return res;
@@ -1789,21 +1682,21 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 _progressDataManager.ReportCurrentProgress(progressDataCancel);
                 return null;
             }
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             _progressDataManager.ReportCurrentProgress(progressData);
 
             try
             {
                 var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
-                var strInclude = string.IsNullOrWhiteSpace(schemasIncludeStr) ? "" : $" AND OWNER IN ({schemasIncludeStr})";
-                var strExclude = string.IsNullOrWhiteSpace(schemasExcludeStr) ? "" : $" AND OWNER NOT IN ({schemasExcludeStr})";
+                var strInclude = string.IsNullOrWhiteSpace(schemasIncludeStr) ? "" : $" AND table_schema IN ({schemasIncludeStr})";
+                var strExclude = string.IsNullOrWhiteSpace(schemasExcludeStr) ? "" : $" AND table_schema NOT IN ({schemasExcludeStr})";
                 string grantQuery = $@"SELECT table_schema, table_name, grantee, privilege, grantable, hierarchy FROM all_tab_privs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}";
                 using (OracleCommand cmd = new OracleCommand(grantQuery, _connection))
                 {
@@ -1831,13 +1724,13 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = res.Count;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return res;
@@ -1892,12 +1785,12 @@ namespace ServiceCheck.Core
             return null;
         }
 
-        public string GetObjectDdl(string objectTypeMulti, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string ownersInclude, string ownersExclude, out bool canceledByUser)
+        public string GetObjectDdl(string objectTypeMulti, string objectName, bool setSequencesValuesTo1, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current, out bool canceledByUser)
         {
             var ddl = "";
-            string ddlQuery = @"
-                SELECT dbms_metadata.get_ddl(:objectType, :objectName) AS ddl 
-                FROM dual";
+            var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
+
+            string ddlQuery = $@"SELECT dbms_metadata.get_ddl{dbLinkAppend}(:objectType, :objectName) AS ddl FROM dual";
 
             string dbObjectType = GetObjectTypeName(objectTypeMulti);
 
@@ -1905,7 +1798,7 @@ namespace ServiceCheck.Core
             {
                 canceledByUser = true;
                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL, stage);
-                progressDataCancel.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataCancel.AllObjCountPlan = schemaObjCountPlan;
                 progressDataCancel.TypeObjCountPlan = typeObjCountPlan;
                 progressDataCancel.Current = current;
                 progressDataCancel.ObjectType = objectTypeMulti;
@@ -1916,7 +1809,7 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
-            progressData.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData.AllObjCountPlan = schemaObjCountPlan;
             progressData.TypeObjCountPlan = typeObjCountPlan;
             progressData.Current = current;
             progressData.ObjectType = objectTypeMulti;
@@ -1959,7 +1852,7 @@ namespace ServiceCheck.Core
                 var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, stage);
                 progressDataErr.Error = e.Message;
                 progressDataErr.ErrorDetails = e.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjCountPlan;
+                progressDataErr.AllObjCountPlan = schemaObjCountPlan;
                 progressDataErr.TypeObjCountPlan = typeObjCountPlan;
                 progressDataErr.Current = current;
                 progressDataErr.ObjectType = objectTypeMulti;
@@ -1969,7 +1862,7 @@ namespace ServiceCheck.Core
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
             progressData2.MetaObjCountFact = 1;
-            progressData2.SchemaObjCountPlan = schemaObjCountPlan;
+            progressData2.AllObjCountPlan = schemaObjCountPlan;
             progressData2.TypeObjCountPlan = typeObjCountPlan;
             progressData2.Current = current;
             progressData2.ObjectType = objectTypeMulti;
@@ -2250,71 +2143,67 @@ namespace ServiceCheck.Core
         }
 
 
-        public static void SaveConnWorkLogInDB(string prefix, ExportProgressDataOuter progressData, string connectionString, DBLog dbLogSettings)
+        public static void SaveConnWorkLogInDB(string prefix, ExportProgressDataOuter progressData,
+            string connectionString, DBLog dbLogSettings)
         {
             //try
             //{
 
-            var addCols = ",MESSAGE,TYPEOBJCOUNTPLAN,CURRENTNUM,TYPEOBJCOUNTFACT,METAOBJCOUNTFACT,SCHEMAOBJCOUNTPLAN,OBJTYPE,OBJNAME";
-            var addCols2 = ",:MESSAGE,:TYPEOBJCOUNTPLAN,:CURRENTNUM,:TYPEOBJCOUNTFACT,:METAOBJCOUNTFACT,:SCHEMAOBJCOUNTPLAN,:OBJTYPE,:OBJNAME";
+            var addCols =
+                ",MESSAGE,TYPEOBJCOUNTPLAN,CURRENTNUM,TYPEOBJCOUNTFACT,METAOBJCOUNTFACT,SCHEMAOBJCOUNTPLAN,OBJTYPE,OBJNAME";
+            var addCols2 =
+                ",:MESSAGE,:TYPEOBJCOUNTPLAN,:CURRENTNUM,:TYPEOBJCOUNTFACT,:METAOBJCOUNTFACT,:SCHEMAOBJCOUNTPLAN,:OBJTYPE,:OBJNAME";
             foreach (var colToExlude in dbLogSettings.ExludeCONNWORKLOGColumnsC)
             {
                 addCols = addCols.Replace($",{colToExlude}", "");
                 addCols2 = addCols2.Replace($",:{colToExlude}", "");
             }
 
-                var query =
-                    $"insert into {prefix}CONNWORKLOG (id, process_id, dbid, username, stage, eventlevel, eventid, eventtime, schemaobjcountfact, errorscount{addCols}) values " +
-                    $"({prefix}CONNWORKLOG_seq.Nextval, :process_id, :dbid, :username, :stage, :eventlevel, :eventid, :eventtime, :schemaobjcountfact, :errorscount{addCols2})";
+            var query =
+                $"insert into {prefix}CONNWORKLOG (id, process_id, dbid, username, dblink, stage, eventlevel, eventid, eventtime, schemaobjcountfact, errorscount{addCols}) values " +
+                $"({prefix}CONNWORKLOG_seq.Nextval, :process_id, :dbid, :username, :dblink, :stage, :eventlevel, :eventid, :eventtime, :schemaobjcountfact, :errorscount{addCols2})";
 
 
 
             using (OracleConnection connection = new OracleConnection(connectionString))
+            {
+                connection.Open();
+                using (OracleCommand cmd = new OracleCommand(query, connection))
                 {
-                    connection.Open();
-                    using (OracleCommand cmd = new OracleCommand(query, connection))
-                    {
-                        cmd.Parameters.Add("process_id", OracleType.Number).Value = int.Parse(progressData.ProcessId);
-                        cmd.Parameters.Add("dbid", OracleType.VarChar).Value =
-                            progressData.CurrentConnection.DBIdC.ToUpper();
-                        cmd.Parameters.Add("username", OracleType.VarChar).Value =
-                            progressData.CurrentConnection.UserName.ToUpper();
-                        cmd.Parameters.Add("stage", OracleType.VarChar).Value = progressData.Stage.ToString();
-                        cmd.Parameters.Add("eventlevel", OracleType.VarChar).Value = progressData.Level.ToString();
-                        cmd.Parameters.Add("eventid", OracleType.VarChar).Value = progressData.EventId;
-                        cmd.Parameters.Add("eventtime", OracleType.DateTime).Value = progressData.EventTime;
-                        cmd.AddNullableParam("errorscount", OracleType.Number, progressData.ErrorsCount);
-                        cmd.AddNullableParam("schemaobjcountfact", OracleType.Number, progressData.SchemaObjCountFact);
+                    cmd.Parameters.Add("process_id", OracleType.Number).Value = int.Parse(progressData.ProcessId);
+                    cmd.Parameters.Add("dbid", OracleType.VarChar).Value =
+                        progressData.CurrentConnection.DBIdC.ToUpper();
+                    cmd.Parameters.Add("username", OracleType.VarChar).Value =
+                        progressData.CurrentConnection.UserName.ToUpper();
+                    cmd.Parameters.Add("dblink", OracleType.VarChar).Value =
+                        string.IsNullOrWhiteSpace(progressData.DbLink) ? "<NONE>" : progressData.DbLink.ToUpper();
+                    cmd.Parameters.Add("stage", OracleType.VarChar).Value = progressData.Stage.ToString();
+                    cmd.Parameters.Add("eventlevel", OracleType.VarChar).Value = progressData.Level.ToString();
+                    cmd.Parameters.Add("eventid", OracleType.VarChar).Value = progressData.EventId;
+                    cmd.Parameters.Add("eventtime", OracleType.DateTime).Value = progressData.EventTime;
+                    cmd.AddNullableParam("errorscount", OracleType.Number, progressData.ErrorsCount);
+                    cmd.AddNullableParam("schemaobjcountfact", OracleType.Number, progressData.AllObjCountFact);
 
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("MESSAGE"))
-                            cmd.Parameters.Add("MESSAGE", OracleType.VarChar).Value = progressData.Message;
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("TYPEOBJCOUNTPLAN"))
-                            cmd.AddNullableParam("TYPEOBJCOUNTPLAN", OracleType.Number, progressData.TypeObjCountPlan);
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("CURRENTNUM"))
-                            cmd.AddNullableParam("CURRENTNUM", OracleType.Number, progressData.Current);
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("TYPEOBJCOUNTFACT"))
-                            cmd.AddNullableParam("TYPEOBJCOUNTFACT", OracleType.Number, progressData.TypeObjCountFact);
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("METAOBJCOUNTFACT"))
-                            cmd.AddNullableParam("METAOBJCOUNTFACT", OracleType.Number, progressData.MetaObjCountFact);
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("SCHEMAOBJCOUNTPLAN"))
-                            cmd.AddNullableParam("SCHEMAOBJCOUNTPLAN", OracleType.Number, progressData.SchemaObjCountPlan);
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("OBJTYPE"))
-                            cmd.AddNullableParam("OBJTYPE", OracleType.VarChar, progressData.ObjectType);
-                        if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("OBJNAME"))
-                            cmd.AddNullableParam("OBJNAME", OracleType.VarChar, progressData.ObjectName);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("MESSAGE"))
+                        cmd.Parameters.Add("MESSAGE", OracleType.VarChar).Value = progressData.Message;
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("TYPEOBJCOUNTPLAN"))
+                        cmd.AddNullableParam("TYPEOBJCOUNTPLAN", OracleType.Number, progressData.TypeObjCountPlan);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("CURRENTNUM"))
+                        cmd.AddNullableParam("CURRENTNUM", OracleType.Number, progressData.Current);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("TYPEOBJCOUNTFACT"))
+                        cmd.AddNullableParam("TYPEOBJCOUNTFACT", OracleType.Number, progressData.TypeObjCountFact);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("METAOBJCOUNTFACT"))
+                        cmd.AddNullableParam("METAOBJCOUNTFACT", OracleType.Number, progressData.MetaObjCountFact);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("SCHEMAOBJCOUNTPLAN"))
+                        cmd.AddNullableParam("SCHEMAOBJCOUNTPLAN", OracleType.Number, progressData.AllObjCountPlan);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("OBJTYPE"))
+                        cmd.AddNullableParam("OBJTYPE", OracleType.VarChar, progressData.ObjectType);
+                    if (!dbLogSettings.ExludeCONNWORKLOGColumnsC.Contains("OBJNAME"))
+                        cmd.AddNullableParam("OBJNAME", OracleType.VarChar, progressData.ObjectName);
 
-                        cmd.ExecuteNonQuery();
-                    }
+                    cmd.ExecuteNonQuery();
                 }
-            //}
-            //catch (Exception ex)
-            //{
-            //    var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, progressData.Stage);
-            //    progressDataErr.Error = ex.Message;
-            //    progressDataErr.ErrorDetails = ex.StackTrace;
-            //    _progressDataManager.ReportCurrentProgress(progressDataErr);
-            //}
+            }
         }
-
     }
 }

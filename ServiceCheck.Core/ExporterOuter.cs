@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace ServiceCheck.Core
 {
@@ -66,7 +65,7 @@ namespace ServiceCheck.Core
             });
         }
 
-        void SaveObjectToFile(ThreadInfoOuter thread, string objectName,
+        void SaveObjectToFile(ThreadInfoOuter thread, string outSchemaName, string objectName,
             string objectTypeSubdirName, string ddl, string fileExtension)
         {
             string fileName = $"{objectName}{fileExtension}".ToLower();
@@ -81,7 +80,7 @@ namespace ServiceCheck.Core
             else
                 //targetFolder = thread.ExportSettings.PathToExportDataTemp;
                 targetFolder = _settings.SchedulerOuterSettings.PathToExportDataTemp;
-            string objectTypePath = Path.Combine(targetFolder, thread.DBSubfolder, thread.UserNameSubfolder, objectTypeSubdirName.ToLower());
+            string objectTypePath = Path.Combine(targetFolder, thread.DBSubfolder, outSchemaName, objectTypeSubdirName.ToLower());
             string fullPath = Path.Combine(objectTypePath, fileName);
             if (!Directory.Exists(objectTypePath))
                 Directory.CreateDirectory(objectTypePath);
@@ -95,7 +94,7 @@ namespace ServiceCheck.Core
             }
         }
 
-        void MoveFilesToErrorFolder(ThreadInfoOuter thread, ProgressDataManagerOuter progressManager)
+        void MoveFilesToErrorFolder(ThreadInfoOuter thread, ProgressDataManagerOuter progressManager, string outSchemaName)
         {
             var progressData = new ExportProgressDataOuter(
                 ExportProgressDataLevel.STAGESTARTINFO,
@@ -107,8 +106,8 @@ namespace ServiceCheck.Core
             {
                 //var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder); 
                 //var destFolder = Path.Combine(thread.ExportSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, thread.UserNameSubfolder);
-                var sourceFolder = Path.Combine(_settings.SchedulerOuterSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder);
-                var destFolder = Path.Combine(_settings.SchedulerOuterSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, thread.UserNameSubfolder);
+                var sourceFolder = Path.Combine(_settings.SchedulerOuterSettings.PathToExportDataTemp, thread.DBSubfolder, outSchemaName);
+                var destFolder = Path.Combine(_settings.SchedulerOuterSettings.PathToExportDataWithErrors, thread.ProcessSubFolder, thread.DBSubfolder, outSchemaName);
                 FilesManager.DeleteDirectory(destFolder);
                 filesCount = FilesManager.MoveDirectory(sourceFolder, destFolder);
             }
@@ -129,7 +128,7 @@ namespace ServiceCheck.Core
 
         }
 
-        void MoveFilesToMainFolder(ThreadInfoOuter thread, ProgressDataManagerOuter progressManager)
+        void MoveFilesToMainFolder(ThreadInfoOuter thread, ProgressDataManagerOuter progressManager, string outSchemaName)
         {
             var progressData = new ExportProgressDataOuter(
                 ExportProgressDataLevel.STAGESTARTINFO,
@@ -140,11 +139,11 @@ namespace ServiceCheck.Core
             try
             {
                 //var sourceFolder = Path.Combine(thread.ExportSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder);
-                var sourceFolder = Path.Combine(_settings.SchedulerOuterSettings.PathToExportDataTemp, thread.DBSubfolder, thread.UserNameSubfolder);
+                var sourceFolder = Path.Combine(_settings.SchedulerOuterSettings.PathToExportDataTemp, thread.DBSubfolder, outSchemaName);
                 var destFolder = thread.ExportSettings.PathToExportDataMain;
                 //if (thread.ExportSettings.UseProcessesSubFoldersInMain)
                 //    destFolder = Path.Combine(destFolder, thread.ProcessSubFolder);
-                destFolder = Path.Combine(destFolder, thread.DBSubfolder, thread.UserNameSubfolder);
+                destFolder = Path.Combine(destFolder, thread.DBSubfolder, outSchemaName);
                 //if (thread.ExportSettings.ClearMainFolderBeforeWriting)
                     FilesManager.DeleteDirectory(destFolder);
                 filesCount = FilesManager.MoveDirectory(sourceFolder, destFolder);
@@ -165,7 +164,7 @@ namespace ServiceCheck.Core
             progressManager.ReportCurrentProgress(progressData2);
         }
 
-        void CreateSimpleRepoCommit(ThreadInfoOuter thread, ProgressDataManagerOuter progressManager)
+        void CreateSimpleRepoCommit(ThreadInfoOuter thread, ProgressDataManagerOuter progressManager, string outSchemaName)
         {
             var progressData = new ExportProgressDataOuter(
                 ExportProgressDataLevel.STAGESTARTINFO,
@@ -181,7 +180,7 @@ namespace ServiceCheck.Core
                 var targetFolder = _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo; //thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo;
                 var vcsManager = new VcsManager();
                 //var currentRepoName = $"{thread.DBSubfolder}\\{thread.UserNameSubfolder}";
-                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.IgnoreDifferences, out changesCount, out repoChanges);
+                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, outSchemaName, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.IgnoreDifferences, true, out changesCount, out repoChanges);
             }
             catch (Exception ex)
             {
@@ -196,6 +195,7 @@ namespace ServiceCheck.Core
                 ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStageOuter.CREATE_SIMPLE_FILE_REPO_COMMIT);
             progressData2.MetaObjCountFact = changesCount;
             progressData2.SetddInfo("REPO_CHANGES", repoChanges);
+            progressData2.SetddInfo("OUTER_SCHEMA", outSchemaName);
             progressManager.ReportCurrentProgress(progressData2);
         }
 
@@ -245,7 +245,7 @@ namespace ServiceCheck.Core
             _mainDbWorker = new DbWorkerOuter(connectionString, null, _mainProgressManager);
         }
 
-        public /*async*/ void StartWork(ThreadInfoOuter ThreadInfoOuter, string connToProcessInfo, bool testMode)
+        public /*async*/ void StartWork(ThreadInfoOuter threadInfoOuter, string connToProcessInfo, bool testMode, string grantsFolder)
         {
             if (_cancellationTokenSource != null)
                 throw new Exception("Задача уже выполняется");
@@ -260,10 +260,10 @@ namespace ServiceCheck.Core
             StartProcess(_startDateTime, connToProcessInfo /*, ct*/);
             //_ThreadInfoOuterList.ForEach(c => c.ProcessId = _processId);
 
-
+            threadInfoOuter.ProcessId = _processId;
 
             // Здесь работаем только в синхронном режиме и только одна задача за один проход
-            StartWork(ThreadInfoOuter, ct, testMode);
+            StartWork(threadInfoOuter, ct, testMode, grantsFolder);
 
         }
 
@@ -273,44 +273,70 @@ namespace ServiceCheck.Core
         }
 
 
-        void ProcessSchema(ThreadInfoOuter threadInfoOuter, CancellationToken ct, ProgressDataManagerOuter progressManager, bool testMode, out int schemaObjectsCountPlan, out int schemaObjectsCountFact)
+        void ProcessSchema(ThreadInfoOuter threadInfoOuter, CancellationToken ct,
+            ProgressDataManagerOuter progressManager, bool testMode, string grantsFolder, out int allObjectsCountPlan,
+            out int allObjectsCountFact)
         {
-            schemaObjectsCountPlan = 0;
-            schemaObjectsCountFact = 0;
+            allObjectsCountPlan = 0;
+            allObjectsCountFact = 0;
 
-            var currentObjectNumber = 0;
+            int allObjectsCounter = 0;
+            int currentSchemaOutObjectsCounter;
+            int currentTypeSchemaOutObjectsCounter;
+
             bool canceledByUser;
 
-            List<TableOrViewComment> tablesComments = new List<TableOrViewComment>();
-            List<TableOrViewComment> viewsComments = new List<TableOrViewComment>();
-            List<ColumnComment> tablesAndViewsColumnsComments = new List<ColumnComment>();
-            List<TableStruct> tablesStructs = new List<TableStruct>();
-            List<TableColumnStruct> tablesAndViewsColumnStruct = new List<TableColumnStruct>();
-            List<IndexStruct> tablesIndexes = new List<IndexStruct>();
-            List<ConstraintStruct> tablesConstraints = new List<ConstraintStruct>();
-            List<PartTables> partTables = new List<PartTables>();
+            var tablesComments = new List<TableOrViewComment>();
+            var viewsComments = new List<TableOrViewComment>();
+            var tablesAndViewsColumnsComments = new List<ColumnComment>();
+            var tablesStructs = new List<TableStruct>();
+            var tablesAndViewsColumnStruct = new List<TableColumnStruct>();
+            var tablesIndexes = new List<IndexStruct>();
+            var tablesConstraints = new List<ConstraintStruct>();
+            var partTables = new List<PartTables>();
+
+            var synonymsStructs = new List<SynonymAttributes>();
+            var sequencesStructs = new List<SequenceAttributes>();
+            var schedulerJobsStructs = new List<SchedulerJob>();
+            var dbmsJobsStructs = new List<DBMSJob>();
+            var packagesHeaders = new List<DbObjectText>();
+            var packagesBodies = new List<DbObjectText>();
+            var packages = new List<DbPackageText>();
+            var functionsText = new List<DbObjectText>();
+            var proceduresText = new List<DbObjectText>();
+            var triggersText = new List<DbObjectText>();
+            var typesText = new List<DbObjectText>();
+            var viewsText = new List<DbObjectText>();
 
             var exportSettingsDetailsLowPriority = threadInfoOuter.ExportSettings.ExportSettingsDetails;
             var exportSettingsDetailsHighPriority = threadInfoOuter.Connection.ExportSettingsDetails;
 
             var exportSettingsDetails =
-                ExportSettingsDetails.GetSumExportSettingsDetails(exportSettingsDetailsLowPriority, exportSettingsDetailsHighPriority);
+                ExportSettingsDetails.GetSumExportSettingsDetails(exportSettingsDetailsLowPriority,
+                    exportSettingsDetailsHighPriority);
             var settingsConnection = threadInfoOuter.Connection;
             //var objectNameMask = exportSettingsDetails.MaskForFileNames;
             //var outputFolder = ThreadInfoOuter.ExportSettings.PathToExportDataMain;
             var objectTypesToProcess = exportSettingsDetails.ObjectTypesToProcessC;
 
-            var schemasIncludeStr = threadInfoOuter.SchemasInclude==null||!threadInfoOuter.SchemasInclude.Any()?"":threadInfoOuter
-                .SchemasInclude.MergeFormatted("'", ",");
-            var schemasExcludeStr = threadInfoOuter.SchemasExclude==null||!threadInfoOuter.SchemasExclude.Any()?"":threadInfoOuter
-                .SchemasExclude.MergeFormatted("'", ",");
+            var schemasIncludeStr = threadInfoOuter.SchemasInclude == null || !threadInfoOuter.SchemasInclude.Any()
+                ? ""
+                : threadInfoOuter
+                    .SchemasInclude.MergeFormatted("'", ",");
+            var schemasExcludeStr = threadInfoOuter.SchemasExclude == null || !threadInfoOuter.SchemasExclude.Any()
+                ? ""
+                : threadInfoOuter
+                    .SchemasExclude.MergeFormatted("'", ",");
 
             string connectionString = $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)" +
                                       $"(HOST={settingsConnection.Host})(PORT={settingsConnection.Port}))" +
                                       $"(CONNECT_DATA=(SID={settingsConnection.SID})));" +
                                       $"User Id={settingsConnection.UserName};Password={settingsConnection.PasswordC};";
 
-            var progressDataForSchema = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, ExportProgressDataStageOuter.PROCESS_SCHEMA);
+            var progressDataForSchema = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO,
+                ExportProgressDataStageOuter.PROCESS_SCHEMA);
+            progressDataForSchema.SetTextAddInfo("DBFOLDER", threadInfoOuter.DBSubfolder);
+            progressDataForSchema.SetTextAddInfo("DBLINK", threadInfoOuter.DbLink);
             progressManager.ReportCurrentProgress(progressDataForSchema);
 
             try
@@ -321,8 +347,8 @@ namespace ServiceCheck.Core
                     if (!testMode)
                     {
                         connection.Open();
-                        var osb = new OracleConnectionStringBuilder(connection.ConnectionString);
-                        var userId = osb.UserID.ToUpper();
+                        //var osb = new OracleConnectionStringBuilder(connection.ConnectionString);
+                        //var userId = osb.UserID.ToUpper();
 
                         var dbWorker = new DbWorkerOuter(connection, threadInfoOuter.DbLink, progressManager);
                         dbWorker.SetCancellationToken(ct);
@@ -361,136 +387,152 @@ namespace ServiceCheck.Core
 
                         dbWorker.SetSessionTransform(exportSettingsDetails.SessionTransformC);
 
-                        List<ObjectTypeNames> namesList = dbWorker.GetObjectsNames(objectTypesToProcess, schemasIncludeStr, schemasExcludeStr,
+                        List<ObjectTypeNames> namesList = dbWorker.GetObjectsNames(objectTypesToProcess,
+                            schemasIncludeStr, schemasExcludeStr,
                             ExportProgressDataStageOuter.GET_OBJECTS_NAMES, out canceledByUser);
                         if (canceledByUser) return;
 
-                        schemaObjectsCountPlan = namesList.Sum(c => c.ObjectNames.Count);
+                        allObjectsCountPlan = namesList.Sum(c => c.ObjectNames.Count);
 
-                        var grants = dbWorker.GetAllObjectsGrants(schemasIncludeStr, schemasExcludeStr, exportSettingsDetails.SkipGrantOptionsC,
-                            ExportProgressDataStageOuter.GET_GRANTS, schemaObjectsCountPlan, out canceledByUser);
+                        var grants = dbWorker.GetAllObjectsGrants(schemasIncludeStr, schemasExcludeStr,
+                            exportSettingsDetails.SkipGrantOptionsC,
+                            ExportProgressDataStageOuter.GET_GRANTS, allObjectsCountPlan, out canceledByUser);
                         if (canceledByUser) return;
 
                         //имя пользователя, под которым сейчас логически работаем
                         //если dblink не указан, то это пользователь коннекта
                         //если dblink указан, то это пользователь dblink
-                        string logicalUserName = string.IsNullOrWhiteSpace(threadInfoOuter.DbLink)?
-                            settingsConnection.UserName.ToUpper():
-                            currentDbLink.UserName.ToUpper();
+                        string logicalUserName = string.IsNullOrWhiteSpace(threadInfoOuter.DbLink)
+                            ? settingsConnection.UserName.ToUpper()
+                            : currentDbLink.UserName.ToUpper();
 
-                        GrantsOuterManager.SaveGrantsForCurrentSchemaAndForPublic(grants, _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo,
+                        GrantsOuterManager.SaveGrantsForCurrentSchemaAndForPublic(grants,grantsFolder,
                             threadInfoOuter.DBSubfolder, logicalUserName);
+
+                        var allGrants = GrantsOuterManager.GetGrants(grantsFolder, threadInfoOuter.DBSubfolder);
 
 
                         if (objectTypesToProcess.Contains("TABLES") || objectTypesToProcess.Contains("VIEWS"))
                         {
                             tablesAndViewsColumnStruct = dbWorker.GetTablesAndViewsColumnsStruct(
-                                ExportProgressDataStageOuter.GET_COLUMNS, schemaObjectsCountPlan,schemasIncludeStr, schemasExcludeStr, systemViewInfo,
+                                ExportProgressDataStageOuter.GET_COLUMNS, allObjectsCountPlan, schemasIncludeStr,
+                                schemasExcludeStr, systemViewInfo,
                                 out canceledByUser);
                             if (canceledByUser) return;
 
                             tablesAndViewsColumnsComments = dbWorker.GetTablesAndViewsColumnComments(
-                                ExportProgressDataStageOuter.GET_COLUMNS_COMMENTS, schemaObjectsCountPlan,schemasIncludeStr, schemasExcludeStr, 
+                                ExportProgressDataStageOuter.GET_COLUMNS_COMMENTS, allObjectsCountPlan,
+                                schemasIncludeStr, schemasExcludeStr,
                                 out canceledByUser);
                             if (canceledByUser) return;
                         }
 
-                        var synonymsStructs = new List<SynonymAttributes>();
-                        var sequencesStructs = new List<SequenceAttributes>();
-                        var schedulerJobsStructs = new List<SchedulerJob>();
-                        var dbmsJobsStructs = new List<DBMSJob>();
-                        var packagesHeaders = new List<DbObjectText>();
-                        var packagesBodies = new List<DbObjectText>();
-                        var functionsText = new List<DbObjectText>();
-                        var proceduresText = new List<DbObjectText>();
-                        var triggersText = new List<DbObjectText>();
-                        var typesText = new List<DbObjectText>();
-                        var viewsText = new List<DbObjectText>();
 
-                        //if (!ThreadInfoOuter.ExportSettings.WriteOnlyToMainDataFolder ||
-                        //    ThreadInfoOuter.ExportSettings.ClearMainFolderBeforeWriting)
-                        if (_settings.IsScheduler || _settings.WinAppSettings.ClearMainFolderBeforeWriting) //ThreadInfoOuter.ExportSettings.ClearMainFolderBeforeWriting)
-                        {
-                            var destFolder = _settings.IsWinApp //ThreadInfoOuter.ExportSettings.WriteOnlyToMainDataFolder
-                                ? _settings.ExportSettings.PathToExportDataMain //ThreadInfoOuter.ExportSettings.PathToExportDataMain
-                                : _settings.SchedulerOuterSettings.PathToExportDataTemp; //ThreadInfoOuter.ExportSettings.PathToExportDataTemp;
-                            //if (ThreadInfoOuter.ExportSettings.WriteOnlyToMainDataFolder &&
-                            //    ThreadInfoOuter.ExportSettings.UseProcessesSubFoldersInMain)
-                            //    destFolder = Path.Combine(destFolder, ThreadInfoOuter.ProcessSubFolder);
-                            destFolder = Path.Combine(destFolder, threadInfoOuter.DBSubfolder, threadInfoOuter.UserNameSubfolder);
-                            FilesManager.DeleteDirectory(destFolder);
-                        }
+
 
 
                         foreach (var objectType in objectTypesToProcess)
                         {
-                            var currentType = namesList.FirstOrDefault(c => c.ObjectType == objectType);
-                            var curentNamesList = currentType.ObjectNames;
 
+                            var currentNamesList = namesList.Where(c => c.ObjectType == objectType)
+                                .SelectMany(c => c.ObjectNames).ToList();
+                            var typeObjCountFact = 0;
 
-
-                            int currentTypeObjectsCounter = 0;
-                            var typeObjCountPlan = curentNamesList.Count;
+                            //int currentTypeObjectsCounter = 0;
+                            var typeObjCountPlan = currentNamesList.Count;
                             try
                             {
                                 //currentObjectTypes = objectType;
                                 string dbObjectType = DbWorker.GetObjectTypeName(objectType);
 
-                                var progressDataForType = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO,
+                                var progressDataForType = new ExportProgressDataOuter(
+                                    ExportProgressDataLevel.STAGESTARTINFO,
                                     ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
-                                progressDataForType.SchemaObjCountPlan = schemaObjectsCountPlan;
+                                progressDataForType.AllObjCountPlan = allObjectsCountPlan;
                                 progressDataForType.TypeObjCountPlan = typeObjCountPlan;
-                                if (currentObjectNumber == 0)
-                                    progressDataForType.Current = null;
-                                else
-                                    progressDataForType.Current = currentObjectNumber;
-
                                 progressDataForType.ObjectType = objectType;
                                 progressManager.ReportCurrentProgress(progressDataForType);
 
 
                                 if (objectType == "SYNONYMS")
                                 {
-                                    synonymsStructs = dbWorker.GetSynonyms(ExportProgressDataStageOuter.GET_SYNONYMS,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
+                                    synonymsStructs = dbWorker.GetSynonyms(
+                                        ExportProgressDataStageOuter.GET_SYNONYMS,
+                                        allObjectsCountPlan, typeObjCountPlan, objectType,
+                                        schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
+                                    typeObjCountFact = synonymsStructs.Count;
                                     if (canceledByUser) return;
                                 }
 
                                 if (objectType == "SEQUENCES")
                                 {
-                                    sequencesStructs = dbWorker.GetSequences(ExportProgressDataStageOuter.GET_SEQUENCES,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
+                                    sequencesStructs = dbWorker.GetSequences(
+                                        ExportProgressDataStageOuter.GET_SEQUENCES,
+                                        allObjectsCountPlan, typeObjCountPlan, objectType,
+                                        schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
+                                    typeObjCountFact = sequencesStructs.Count;
                                     if (canceledByUser) return;
                                 }
 
                                 if (objectType == "JOBS")
                                 {
                                     schedulerJobsStructs = dbWorker.GetSchedulerJobs(
-                                        ExportProgressDataStageOuter.GET_SCHEDULER_JOBS, schemaObjectsCountPlan,
+                                        ExportProgressDataStageOuter.GET_SCHEDULER_JOBS, allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType,  schemasIncludeStr, schemasExcludeStr, out canceledByUser);
-                                    if (canceledByUser) return;
-                                    dbmsJobsStructs = dbWorker.GetDBMSJobs(ExportProgressDataStageOuter.GET_DMBS_JOBS,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
+                                    typeObjCountFact = schedulerJobsStructs.Count;
+                                    if (canceledByUser) return;
+                                    dbmsJobsStructs = dbWorker.GetDBMSJobs(
+                                        ExportProgressDataStageOuter.GET_DMBS_JOBS,
+                                        allObjectsCountPlan, typeObjCountPlan, objectType,
+                                        schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
+                                    typeObjCountFact += dbmsJobsStructs.Count;
                                     if (canceledByUser) return;
                                 }
 
                                 if (objectType == "PACKAGES")
                                 {
-                                    packagesHeaders = dbWorker.GetObjectsSourceByType("PACKAGE", userId,
-                                        ExportProgressDataStageOuter.GET_PACKAGES_HEADERS, schemaObjectsCountPlan,
+                                    packagesHeaders = dbWorker.GetObjectsSourceByType("PACKAGE",
+                                        /*currentOutSchemaName,*/
+                                        ExportProgressDataStageOuter.GET_PACKAGES_HEADERS, allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,   out canceledByUser);
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
                                     if (canceledByUser) return;
 
                                     packagesBodies =
-                                        dbWorker.GetObjectsSourceByType("PACKAGE BODY", userId,
-                                            ExportProgressDataStageOuter.GET_PACKAGES_BODIES, schemaObjectsCountPlan,
+                                        dbWorker.GetObjectsSourceByType("PACKAGE BODY", /*currentOutSchemaName,*/
+                                            ExportProgressDataStageOuter.GET_PACKAGES_BODIES,
+                                            allObjectsCountPlan,
                                             typeObjCountPlan,
-                                            currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
+                                            objectType, schemasIncludeStr, schemasExcludeStr,
+                                            out canceledByUser);
+                                    foreach (var packagesHeader in packagesHeaders)
+                                    {
+                                        var currentPackage = packages.FirstOrDefault(c => c.Owner == packagesHeader.Owner && c.Name == packagesHeader.Name);
+                                        if (currentPackage == null)
+                                        {
+                                            currentPackage = new DbPackageText
+                                                {Owner = packagesHeader.Owner, Name = packagesHeader.Name, Header = packagesHeader.Text};
+                                            packages.Add(currentPackage);
+                                        }
+                                    }
+                                    foreach (var packagesBody in packagesBodies)
+                                    {
+                                        var currentPackage = packages.FirstOrDefault(c => c.Owner == packagesBody.Owner && c.Name == packagesBody.Name);
+                                        if (currentPackage == null)
+                                        {
+                                            currentPackage = new DbPackageText
+                                                {Owner = packagesBody.Owner, Name = packagesBody.Name};
+                                            packages.Add(currentPackage);
+                                        }
+                                        currentPackage.Body = packagesBody.Text;
+                                    }
+                                    typeObjCountFact = packages.Count;
                                     if (canceledByUser) return;
                                 }
 
@@ -498,9 +540,12 @@ namespace ServiceCheck.Core
                                 {
                                     functionsText = dbWorker.GetObjectsSourceByType(
                                         DbWorker.GetObjectTypeName(objectType),
-                                        userId, ExportProgressDataStageOuter.GET_FUNCTIONS, schemaObjectsCountPlan,
+                                        /*currentOutSchemaName,*/ ExportProgressDataStageOuter.GET_FUNCTIONS,
+                                        allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
+                                    typeObjCountFact = functionsText.Count;
                                     if (canceledByUser) return;
                                 }
 
@@ -508,9 +553,12 @@ namespace ServiceCheck.Core
                                 {
                                     proceduresText = dbWorker.GetObjectsSourceByType(
                                         DbWorker.GetObjectTypeName(objectType),
-                                        userId, ExportProgressDataStageOuter.GET_PROCEDURES, schemaObjectsCountPlan,
+                                        /*currentOutSchemaName,*/ ExportProgressDataStageOuter.GET_PROCEDURES,
+                                        allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
+                                    typeObjCountFact = proceduresText.Count;
                                     if (canceledByUser) return;
                                 }
 
@@ -518,51 +566,68 @@ namespace ServiceCheck.Core
                                 {
                                     triggersText = dbWorker.GetObjectsSourceByType(
                                         DbWorker.GetObjectTypeName(objectType),
-                                        userId, ExportProgressDataStageOuter.GET_TRIGGERS, schemaObjectsCountPlan,
+                                        /*currentOutSchemaName,*/ ExportProgressDataStageOuter.GET_TRIGGERS,
+                                        allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
+                                    typeObjCountFact = triggersText.Count;
                                     if (canceledByUser) return;
                                 }
 
                                 if (objectType == "TYPES")
                                 {
-                                    typesText = dbWorker.GetObjectsSourceByType(DbWorker.GetObjectTypeName(objectType),
-                                        userId, ExportProgressDataStageOuter.GET_TYPES, schemaObjectsCountPlan,
+                                    typesText = dbWorker.GetObjectsSourceByType(
+                                        DbWorker.GetObjectTypeName(objectType),
+                                        /*currentOutSchemaName,*/ ExportProgressDataStageOuter.GET_TYPES,
+                                        allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,out canceledByUser);
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
+                                    typeObjCountFact = typesText.Count;
                                     if (canceledByUser) return;
                                 }
 
                                 if (objectType == "TABLES")
                                 {
 
-                                    tablesConstraints = dbWorker.GetTablesConstraints(userId,
-                                        ExportProgressDataStageOuter.GET_TABLE_CONSTRAINTS, schemaObjectsCountPlan,
+                                    tablesConstraints = dbWorker.GetTablesConstraints( /*userId,*/
+                                        ExportProgressDataStageOuter.GET_TABLE_CONSTRAINTS, allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr, out canceledByUser);
-                                    if (canceledByUser) return;
-
-                                    tablesStructs = dbWorker.GetTablesStruct(ExportProgressDataStageOuter.GET_TABLES_STRUCTS,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType,  schemasIncludeStr, schemasExcludeStr,
+                                        objectType, /*schemasIncludeStr, schemasExcludeStr,*/
                                         out canceledByUser);
                                     if (canceledByUser) return;
 
-                                    tablesIndexes = dbWorker.GetTablesIndexes(ExportProgressDataStageOuter.GET_TABLES_INDEXES,
-                                        schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr,
+                                    tablesStructs = dbWorker.GetTablesStruct(
+                                        ExportProgressDataStageOuter.GET_TABLES_STRUCTS,
+                                        allObjectsCountPlan, typeObjCountPlan, objectType,
+                                        schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
+                                    typeObjCountFact = tablesStructs.Count;
+                                    if (canceledByUser) return;
+
+                                    tablesIndexes = dbWorker.GetTablesIndexes(
+                                        ExportProgressDataStageOuter.GET_TABLES_INDEXES,
+                                        allObjectsCountPlan, typeObjCountPlan, objectType,
+                                        schemasIncludeStr, schemasExcludeStr,
                                         out canceledByUser);
                                     if (canceledByUser) return;
 
                                     tablesComments =
                                         dbWorker.GetTableOrViewComments(dbObjectType,
-                                            ExportProgressDataStageOuter.GET_TABLES_COMMENTS, schemaObjectsCountPlan,
+                                            ExportProgressDataStageOuter.GET_TABLES_COMMENTS,
+                                            allObjectsCountPlan,
                                             typeObjCountPlan,
-                                            currentObjectNumber, objectType, schemasIncludeStr, schemasExcludeStr, out canceledByUser);
+                                            objectType, schemasIncludeStr, schemasExcludeStr,
+                                            out canceledByUser);
                                     if (canceledByUser) return;
 
-                                    partTables = dbWorker.GetTablesPartitions(exportSettingsDetails.GetPartitionMode,
-                                        ExportProgressDataStageOuter.GET_TABLES_PARTS, schemaObjectsCountPlan,
+                                    partTables = dbWorker.GetTablesPartitions(
+                                        exportSettingsDetails.GetPartitionMode,
+                                        ExportProgressDataStageOuter.GET_TABLES_PARTS, allObjectsCountPlan,
                                         typeObjCountPlan,
-                                        currentObjectNumber, objectType, systemViewInfo,  schemasIncludeStr, schemasExcludeStr, out canceledByUser);
+                                        objectType, systemViewInfo, schemasIncludeStr,
+                                        schemasExcludeStr, out canceledByUser);
                                     if (canceledByUser) return;
                                 }
 
@@ -570,39 +635,102 @@ namespace ServiceCheck.Core
                                 {
 
                                     viewsText = dbWorker.GetViews(ExportProgressDataStageOuter.GET_VIEWS,
-                                        schemaObjectsCountPlan, typeObjCountPlan,
-                                        currentObjectNumber, objectType,schemasIncludeStr, schemasExcludeStr, out canceledByUser);
+                                        allObjectsCountPlan, typeObjCountPlan,
+                                        objectType, schemasIncludeStr, schemasExcludeStr,
+                                        out canceledByUser);
                                     if (canceledByUser) return;
+                                    typeObjCountFact = viewsText.Count;
 
                                     viewsComments =
                                         dbWorker.GetTableOrViewComments(dbObjectType,
-                                            ExportProgressDataStageOuter.GET_VIEWS_COMMENTS, schemaObjectsCountPlan,
+                                            ExportProgressDataStageOuter.GET_VIEWS_COMMENTS, allObjectsCountPlan,
                                             typeObjCountPlan,
-                                            currentObjectNumber, objectType,  schemasIncludeStr, schemasExcludeStr, out canceledByUser);
+                                            objectType, schemasIncludeStr, schemasExcludeStr,
+                                            out canceledByUser);
                                     if (canceledByUser) return;
                                 }
+                            }
+                            catch (Exception ex)
+                            {
+                                var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR,
+                                    ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
+                                progressDataErr.Error = ex.Message;
+                                progressDataErr.ErrorDetails = ex.StackTrace;
+                                progressDataErr.AllObjCountPlan = allObjectsCountPlan;
+                                progressDataErr.TypeObjCountPlan = currentNamesList.Count;
+                                progressDataErr.ObjectType = objectType;
+                                progressManager.ReportCurrentProgress(progressDataErr);
+                            }
 
-                                string objectName = string.Empty;
+                            var progressDataForType2 = new ExportProgressDataOuter(
+                                ExportProgressDataLevel.STAGEENDINFO,
+                                ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
+                            progressDataForType2.AllObjCountPlan = allObjectsCountPlan;
+                            progressDataForType2.TypeObjCountPlan = currentNamesList.Count;
+                            progressDataForType2.TypeObjCountFact = typeObjCountFact;
+                            progressDataForType2.ObjectType = objectType;
+                            progressManager.ReportCurrentProgress(progressDataForType2);
+                        }
 
-                                for (var i = 0; i < curentNamesList.Count; i++)
+
+
+
+
+
+
+                        if (_settings.IsSchedulerOuter || _settings.WinAppSettings.ClearMainFolderBeforeWriting)
+                        {
+                            var destFolder = _settings.IsWinApp
+                                ? _settings.ExportSettings.PathToExportDataMain
+                                : _settings.SchedulerOuterSettings.PathToExportDataTemp;
+                            destFolder = Path.Combine(destFolder, threadInfoOuter.DBSubfolder);
+                            FilesManager.DeleteDirectory(destFolder);
+                        }
+
+
+
+
+
+                        foreach (var schemaCollection in namesList.GroupBy(c => c.SchemaName))
+                        {
+
+                            var schemaOutObjectsPlan = schemaCollection.Sum(c => c.ObjectNames.Count);
+                            var currentOutSchemaName = schemaCollection.Key;
+                            currentSchemaOutObjectsCounter = 0;
+
+                            var progressDataForOutSchema = new ExportProgressDataOuter(
+                                ExportProgressDataLevel.STAGESTARTINFO,
+                                ExportProgressDataStageOuter.PROCESS_OUT_SCHEMA);
+                            progressDataForOutSchema.SetTextAddInfo("OUTSCHEMANAME", currentOutSchemaName);
+                            progressDataForOutSchema.SchemaOutObjCountPlan = schemaOutObjectsPlan;
+                            if (allObjectsCounter == 0)
+                                progressDataForOutSchema.Current = null;
+                            else
+                                progressDataForOutSchema.Current = allObjectsCounter;
+                            progressManager.ReportCurrentProgress(progressDataForOutSchema);
+
+
+                            foreach (var objectType in objectTypesToProcess)
+                            {
+                                currentTypeSchemaOutObjectsCounter = 0;
+
+                                var currentNamesList = schemaCollection.Where(c => c.ObjectType == objectType)
+                                    .SelectMany(c => c.ObjectNames).ToList();
+
+
+                                //int currentTypeObjectsCounter = 0;
+                                var currentTypeSchemaOutObjectsPlan = currentNamesList.Count;
+
+
+                                for (var i = 0; i < currentNamesList.Count; i++)
                                 {
-                                    if (ct.IsCancellationRequested)
-                                    {
-                                        var progressDataForTypeCancel = new ExportProgressDataOuter(
-                                            ExportProgressDataLevel.CANCEL,
-                                            ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
-                                        progressDataForTypeCancel.SchemaObjCountPlan = schemaObjectsCountPlan;
-                                        progressDataForTypeCancel.TypeObjCountPlan = curentNamesList.Count;
-                                        progressDataForTypeCancel.TypeObjCountFact = currentTypeObjectsCounter;
-                                        progressDataForTypeCancel.Current = currentObjectNumber;
-                                        progressDataForTypeCancel.ObjectType = objectType;
-                                        progressManager.ReportCurrentProgress(progressDataForTypeCancel);
-                                        break;
-                                    }
+                                    
+                                    var objectName = currentNamesList[i];
 
-                                    objectName = curentNamesList[i];
-                                    currentObjectNumber++;
-                                    currentTypeObjectsCounter++;
+                                    allObjectsCounter++;
+                                    currentSchemaOutObjectsCounter++;
+                                    currentTypeSchemaOutObjectsCounter++;
+
                                     string ddl = string.Empty;
                                     string ddlPackageBody = string.Empty;
                                     string ddlPackageHead = string.Empty;
@@ -617,62 +745,72 @@ namespace ServiceCheck.Core
                                         var progressDataForObject = new ExportProgressDataOuter(
                                             ExportProgressDataLevel.STAGESTARTINFO,
                                             ExportProgressDataStageOuter.PROCESS_OBJECT);
-                                        progressDataForObject.SchemaObjCountPlan = schemaObjectsCountPlan;
-                                        progressDataForObject.TypeObjCountPlan = curentNamesList.Count;
-                                        progressDataForObject.Current = currentObjectNumber;
+                                        progressDataForObject.AllObjCountPlan = allObjectsCountPlan;
+                                        progressDataForObject.SchemaOutObjCountPlan = schemaOutObjectsPlan;
+                                        progressDataForObject.TypeObjCountPlan = currentNamesList.Count;
+                                        progressDataForObject.Current = allObjectsCounter;
                                         progressDataForObject.ObjectType = objectType;
                                         progressDataForObject.ObjectName = objectName;
                                         progressManager.ReportCurrentProgress(progressDataForObject);
 
                                         if (objectType == "PACKAGES")
                                         {
-                                            ddlPackageHead = DDLCreator.GetObjectDdlForPackageHeader(packagesHeaders, 
+                                            ddlPackageHead = DDLCreator.GetObjectDdlForPackageHeader(
+                                                packagesHeaders, schemaCollection.Key,
                                                 objectName,
                                                 exportSettingsDetails.AddSlashToC);
                                             ddlPackageBody = DDLCreator.GetObjectDdlForPackageBody(packagesBodies,
+                                                schemaCollection.Key,
                                                 objectName,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "FUNCTIONS")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSourceText(functionsText, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSourceText(functionsText,
+                                                schemaCollection.Key, objectName,
                                                 objectType,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "PROCEDURES")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSourceText(proceduresText, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSourceText(proceduresText,
+                                                schemaCollection.Key, objectName,
                                                 objectType,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "TRIGGERS")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSourceText(triggersText, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSourceText(triggersText,
+                                                schemaCollection.Key, objectName,
                                                 objectType,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "TYPES")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSourceText(typesText, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSourceText(typesText,
+                                                schemaCollection.Key, objectName,
                                                 objectType,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "SYNONYMS")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSynonym(synonymsStructs, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSynonym(synonymsStructs,
+                                                schemaCollection.Key, objectName,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "SEQUENCES")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSequence(sequencesStructs, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSequence(sequencesStructs,
+                                                schemaCollection.Key, objectName,
                                                 exportSettingsDetails.SetSequencesValuesTo1,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "VIEWS")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForView(viewsText, tablesAndViewsColumnStruct,
+                                            ddl = DDLCreator.GetObjectDdlForView(viewsText,
+                                                tablesAndViewsColumnStruct,
                                                 viewsComments,
-                                                tablesAndViewsColumnsComments, objectName,
+                                                tablesAndViewsColumnsComments, schemaCollection.Key, objectName,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "TABLES")
@@ -683,7 +821,7 @@ namespace ServiceCheck.Core
                                                 tablesConstraints,
                                                 tablesIndexes, tablesComments, tablesAndViewsColumnsComments,
                                                 partTables,
-                                                objectName, userId, exportSettingsDetails.AddSlashToC);
+                                                objectName, currentOutSchemaName, exportSettingsDetails.AddSlashToC, true);
                                         }
                                         else if (objectType == "JOBS")
                                         {
@@ -703,8 +841,9 @@ namespace ServiceCheck.Core
                                         {
                                             ddl = dbWorker.GetObjectDdl(objectType, objectName,
                                                 exportSettingsDetails.SetSequencesValuesTo1,
-                                                exportSettingsDetails.AddSlashToC, ExportProgressDataStageOuter.GET_DBLINK,
-                                                schemaObjectsCountPlan, typeObjCountPlan, currentObjectNumber, schemasIncludeStr, schemasExcludeStr,
+                                                exportSettingsDetails.AddSlashToC,
+                                                ExportProgressDataStageOuter.GET_DBLINK,
+                                                allObjectsCountPlan, currentTypeSchemaOutObjectsPlan, allObjectsCounter,
                                                 out canceledByUser);
                                             if (canceledByUser) return;
                                         }
@@ -713,14 +852,15 @@ namespace ServiceCheck.Core
                                             //сюда не должны зайти, но оставим на всякий случай
                                             var objectSource = dbWorker.GetObjectSource(objectName, objectType,
                                                 exportSettingsDetails.AddSlashToC,
-                                                ExportProgressDataStageOuter.GET_UNKNOWN_OBJECT_DDL, schemaObjectsCountPlan,
-                                                typeObjCountPlan,
-                                                currentObjectNumber, out canceledByUser);
+                                                ExportProgressDataStageOuter.GET_UNKNOWN_OBJECT_DDL,
+                                                allObjectsCountPlan,
+                                                currentTypeSchemaOutObjectsPlan,
+                                                allObjectsCounter, out canceledByUser);
                                             if (canceledByUser) return;
                                             ddl = DDLCreator.AddCreateOrReplace(objectSource);
                                         }
 
-                                        string objectGrants = DDLCreator.GetObjectGrants(grants, objectName,
+                                        string objectGrants = DDLCreator.GetObjectGrants(allGrants, currentOutSchemaName,  objectName,
                                             exportSettingsDetails.OrderGrantOptionsC);
                                         if (objectType != "PACKAGES")
                                         {
@@ -728,8 +868,10 @@ namespace ServiceCheck.Core
                                         }
                                         else
                                         {
-                                            ddlPackageHead = DDLCreator.GetDDlWithGrants(ddlPackageHead, objectGrants);
-                                            ddlPackageBody = DDLCreator.GetDDlWithGrants(ddlPackageBody, objectGrants);
+                                            ddlPackageHead =
+                                                DDLCreator.GetDDlWithGrants(ddlPackageHead, objectGrants);
+                                            ddlPackageBody =
+                                                DDLCreator.GetDDlWithGrants(ddlPackageBody, objectGrants);
                                             ddl = DDLCreator.MergeHeadAndBody(ddlPackageHead, ddlPackageBody);
                                         }
 
@@ -743,8 +885,10 @@ namespace ServiceCheck.Core
                                                 ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
                                             progressWarning.SetTextAddInfo("MOMENTAL_INFO", message);
                                             progressManager.ReportCurrentProgress(progressWarning);
-                                            currentObjectNumber--;
-                                            currentTypeObjectsCounter--;
+
+                                            allObjectsCounter--;
+                                            currentSchemaOutObjectsCounter--;
+                                            currentTypeSchemaOutObjectsCounter--;
                                         }
                                         else
                                         {
@@ -760,7 +904,9 @@ namespace ServiceCheck.Core
                                                     objectTypeSubdirName = "dbms_jobs";
                                             }
 
-                                            SaveObjectToFile(threadInfoOuter, objectName, objectTypeSubdirName, ddl, extension);
+                                            SaveObjectToFile(threadInfoOuter, currentOutSchemaName, objectName,
+                                                objectTypeSubdirName, ddl,
+                                                extension);
                                         }
 
                                         //currentObjectName = string.Empty;
@@ -773,128 +919,121 @@ namespace ServiceCheck.Core
                                                 ExportProgressDataStageOuter.PROCESS_OBJECT);
                                         progressDataForObjectErr.Error = ex.Message;
                                         progressDataForObjectErr.ErrorDetails = ex.StackTrace;
-                                        progressDataForObjectErr.SchemaObjCountPlan = schemaObjectsCountPlan;
-                                        progressDataForObjectErr.TypeObjCountPlan = curentNamesList.Count;
-                                        progressDataForObjectErr.Current = currentObjectNumber;
+                                        progressDataForObjectErr.AllObjCountPlan = allObjectsCountPlan;
+                                        progressDataForObjectErr.SchemaOutObjCountPlan = schemaOutObjectsPlan;
+                                        progressDataForObjectErr.TypeObjCountPlan = currentNamesList.Count;
+                                        progressDataForObjectErr.Current = allObjectsCounter;
                                         progressDataForObjectErr.ObjectType = objectType;
                                         progressDataForObjectErr.ObjectName = objectName;
                                         progressManager.ReportCurrentProgress(progressDataForObjectErr);
 
-                                        currentObjectNumber--;
-                                        currentTypeObjectsCounter--;
+                                        allObjectsCounter--;
+                                        currentSchemaOutObjectsCounter--;
+                                        currentTypeSchemaOutObjectsCounter--;
                                     }
 
                                     var progressDataForObject2 = new ExportProgressDataOuter(
-                                        ExportProgressDataLevel.STAGEENDINFO, ExportProgressDataStageOuter.PROCESS_OBJECT);
-                                    progressDataForObject2.SchemaObjCountPlan = schemaObjectsCountPlan;
-                                    progressDataForObject2.TypeObjCountPlan = curentNamesList.Count;
-                                    progressDataForObject2.Current = currentObjectNumber;
+                                        ExportProgressDataLevel.STAGEENDINFO,
+                                        ExportProgressDataStageOuter.PROCESS_OBJECT);
+                                    progressDataForObject2.AllObjCountPlan = allObjectsCountPlan;
+                                    progressDataForObject2.SchemaOutObjCountPlan = schemaOutObjectsPlan;
+                                    progressDataForObject2.TypeObjCountPlan = currentNamesList.Count;
+                                    progressDataForObject2.Current = allObjectsCounter;
                                     progressDataForObject2.ObjectType = objectType;
                                     progressDataForObject2.ObjectName = objectName;
                                     progressManager.ReportCurrentProgress(progressDataForObject2);
                                 }
 
-                            }
-                            catch (Exception ex)
-                            {
-                                var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR,
-                                    ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
-                                progressDataErr.Error = ex.Message;
-                                progressDataErr.ErrorDetails = ex.StackTrace;
-                                progressDataErr.SchemaObjCountPlan = schemaObjectsCountPlan;
-                                progressDataErr.TypeObjCountPlan = curentNamesList.Count;
-                                progressDataErr.TypeObjCountFact = currentTypeObjectsCounter;
-                                progressDataErr.Current = currentObjectNumber;
-                                progressDataErr.ObjectType = objectType;
-                                progressManager.ReportCurrentProgress(progressDataErr);
+
                             }
 
-                            var progressDataForType2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO,
-                                ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE);
-                            progressDataForType2.SchemaObjCountPlan = schemaObjectsCountPlan;
-                            progressDataForType2.TypeObjCountPlan = curentNamesList.Count;
-                            progressDataForType2.TypeObjCountFact = currentTypeObjectsCounter;
-                            progressDataForType2.Current = currentObjectNumber;
-                            progressDataForType2.ObjectType = objectType;
-                            progressManager.ReportCurrentProgress(progressDataForType2);
 
-                            schemaObjectsCountFact += currentTypeObjectsCounter;
+
+
 
                             if (ct.IsCancellationRequested)
                             {
                                 var progressDataCancel = new ExportProgressDataOuter(ExportProgressDataLevel.CANCEL,
                                     ExportProgressDataStageOuter.PROCESS_SCHEMA);
-                                progressDataCancel.SchemaObjCountPlan = schemaObjectsCountPlan;
-                                progressDataCancel.SchemaObjCountFact = schemaObjectsCountFact;
+                                progressDataCancel.AllObjCountPlan = allObjectsCountPlan;
+                                progressDataCancel.AllObjCountFact = allObjectsCounter;
                                 progressManager.ReportCurrentProgress(progressDataCancel);
                                 break;
                             }
+
+                            if (_settings.IsSchedulerOuter)
+                            {
+                                if (progressManager.CurrentThreadErrorsCount > 0)
+                                {
+                                    //TODO переносить в err только файлы с ошибками
+                                    //MoveFilesToErrorFolder(threadInfoOuter, progressManager, currentOutSchemaName);
+                                }
+
+                                
+                                //else
+                                    MoveFilesToMainFolder(threadInfoOuter, progressManager, currentOutSchemaName);
+                            }
+
+                            if (_settings.IsSchedulerOuter && _settings.SchedulerOuterSettings.RepoSettings != null)
+                            {
+                                if (_settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo != null &&
+                                    _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo
+                                        .CommitToRepoAfterSuccess/* &&
+                                    progressManager.CurrentThreadErrorsCount == 0*/)
+                                {
+                                    CreateSimpleRepoCommit(threadInfoOuter, progressManager, currentOutSchemaName);
+                                }
+                            }
+
+                            var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO,
+                                ExportProgressDataStageOuter.PROCESS_OUT_SCHEMA);
+                            progressData.AllObjCountPlan = allObjectsCountPlan;
+                            progressData.AllObjCountFact = allObjectsCounter;
+                            progressData.Current = allObjectsCounter;
+                            progressData.SchemaOutObjCountPlan = schemaOutObjectsPlan;
+                            progressData.SchemaOutObjCountFact = currentSchemaOutObjectsCounter;
+                            progressManager.ReportCurrentProgress(progressData);
                         }
                     }
-
                 }
-                //if (!ThreadInfoOuter.ExportSettings.WriteOnlyToMainDataFolder)
-                if (_settings.IsScheduler)
-                {
-                    if (progressManager.CurrentThreadErrorsCount > 0)
-                        MoveFilesToErrorFolder(threadInfoOuter, progressManager);
-                    else
-                        MoveFilesToMainFolder(threadInfoOuter, progressManager);
-                }
-
-                if (_settings.IsScheduler && _settings.SchedulerOuterSettings.RepoSettings!=null) //ThreadInfoOuter.ExportSettings.RepoSettings != null)
-                {
-                    if (_settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo != null &&
-                        _settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.CommitToRepoAfterSuccess &&
-                        progressManager.CurrentThreadErrorsCount == 0)
-                    {
-                        CreateSimpleRepoCommit(threadInfoOuter, progressManager);
-                    }
-
-                    //if (_settings.SchedulerSettings.RepoSettings.GitLabRepo != null &&
-                    //    _settings.SchedulerSettings.RepoSettings.GitLabRepo.CommitToRepoAfterSuccess &&
-                    //    progressManager.CurrentThreadErrorsCount == 0)
-                    //{
-                    //    //TODO копирование сформированных данным экспортом файлов из папки PathToExportDataMain в папку PathToExportDataForRepo (если задано настройками)
-                    //    CopyFilesToGitLabRepoFolder(ThreadInfoOuter);
-                    //    //TODO создание коммита
-                    //    CreateAndSendCommitToGitLab(ThreadInfoOuter);
-                    //}
-                }
-
             }
             catch (Exception ex)
             {
-                var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR, ExportProgressDataStageOuter.PROCESS_SCHEMA);
+                var progressDataErr = new ExportProgressDataOuter(ExportProgressDataLevel.ERROR,
+                    ExportProgressDataStageOuter.PROCESS_SCHEMA);
                 progressDataErr.Error = ex.Message;
                 progressDataErr.ErrorDetails = ex.StackTrace;
-                progressDataErr.SchemaObjCountPlan = schemaObjectsCountPlan;
-                progressDataErr.SchemaObjCountFact = schemaObjectsCountFact;
+                progressDataErr.AllObjCountPlan = allObjectsCountPlan;
+                progressDataErr.AllObjCountFact = allObjectsCounter;
                 progressManager.ReportCurrentProgress(progressDataErr);
             }
+
+            allObjectsCountFact = allObjectsCounter;
         }
 
 
-        public /*async*/ void StartWork(ThreadInfoOuter ThreadInfoOuter, CancellationToken ct, bool testMode)
+        public /*async*/ void StartWork(ThreadInfoOuter threadInfoOuter, CancellationToken ct, bool testMode, string grantsFolder)
         {
             var progressManager = new ProgressDataManagerOuter(_progressReporter);
-            progressManager.SetSchedulerProps(ThreadInfoOuter.ProcessId, ThreadInfoOuter.Connection);
+            progressManager.SetSchedulerProps(threadInfoOuter.ProcessId, threadInfoOuter.Connection);
+            progressManager.SetCurrentThreadProps(threadInfoOuter.DbLink, threadInfoOuter.DBSubfolder);
 
             _mainProgressManager.ChildProgressManagers.Add(progressManager);
 
             int schemaObjectsCountPlan;
             int schemaObjectsCountFact;
-            ProcessSchema(ThreadInfoOuter, ct, progressManager, testMode, out schemaObjectsCountPlan,
-                out schemaObjectsCountFact);
+            ProcessSchema(threadInfoOuter, ct, progressManager, testMode, grantsFolder, out schemaObjectsCountPlan, out schemaObjectsCountFact);
 
             //ThreadInfoOuter.Finished = true;
 
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO,
                 ExportProgressDataStageOuter.PROCESS_SCHEMA);
-            progressData.SchemaObjCountPlan = schemaObjectsCountPlan;
-            progressData.SchemaObjCountFact = schemaObjectsCountFact;
+            progressData.AllObjCountPlan = schemaObjectsCountPlan;
+            progressData.AllObjCountFact = schemaObjectsCountFact;
             progressData.Current = schemaObjectsCountFact;
             progressData.ErrorsCount = progressManager.CurrentThreadErrorsCount;
+            progressData.SetTextAddInfo("DBFOLDER", threadInfoOuter.DBSubfolder);
+            progressData.SetTextAddInfo("DBLINK", threadInfoOuter.DbLink);
             progressManager.ReportCurrentProgress(progressData);
 
 
@@ -911,7 +1050,7 @@ namespace ServiceCheck.Core
             progressDataProcMain.SetTextAddInfo("SCHEMAS_SUCCESS", schemasSuccess);
             progressDataProcMain.SetTextAddInfo("SCHEMAS_ERROR", schemasWithErrors);
             _mainProgressManager.ReportCurrentProgress(progressDataProcMain);
-            if (_settings.IsScheduler)
+            if (_settings.IsSchedulerOuter)
                 EndProcess(_settings.SchedulerOuterSettings.DBLog.DBLogPrefix, progressDataProcMain);
 
         }
@@ -928,7 +1067,7 @@ namespace ServiceCheck.Core
             //}
             
 
-            if (_settings.IsScheduler)
+            if (_settings.IsSchedulerOuter)
             {
                 _mainDbWorker.SaveNewProcessInDBLog(currentDateTime, _settings.SchedulerOuterSettings.DBLog.DBLogPrefix, out _processId);
             }
@@ -949,18 +1088,19 @@ namespace ServiceCheck.Core
         public List<SchemaWorkAggrFullStatOuter> GetAggrFullStat(List<ConnectionOuterToProcess> scheduledConnections, int getStatForLastDays, string prefix)
         {
             //TODO
-            /*var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
+            var plainStat = _mainDbWorker.GetStat(getStatForLastDays, prefix);
             var appWorkStat = _mainDbWorker.GetAppWorkStat(getStatForLastDays, prefix);
             var commitStat = _mainDbWorker.GetCommitStat(getStatForLastDays, prefix);
-            return SchemaWorkAggrFullStat.GetAggrFullStat(plainStat, appWorkStat, commitStat, scheduledConnections, getStatForLastDays);*/
-            return new List<SchemaWorkAggrFullStatOuter>();
+            return SchemaWorkAggrFullStatOuter.GetAggrFullStat(plainStat, appWorkStat, commitStat, scheduledConnections, getStatForLastDays);
+            //return new List<SchemaWorkAggrFullStatOuter>();
         }
 
-        static PrognozBySchemaOuter getStatForSchema(List<SchemaWorkAggrFullStatOuter> statInfo, string dbid, string userName,
+        static PrognozBySchemaOuter getStatForSchema(List<SchemaWorkAggrFullStatOuter> statInfo, string dbid, string userName, string dblink,
             int minSuccessResultsForPrognoz, int? intervalForSearch)
         {
             var schemaStat = statInfo.Where(c =>
                 (userName is null || c.UserName.ToUpper() == userName.ToUpper()) &&
+                (dblink is null || c.DbLink.ToUpper() == dblink.ToUpper()) &&
                 (dbid is null || c.DBId.ToUpper() == dbid.ToUpper()) &&
                 ((intervalForSearch is null && c.SuccessLaunchesCount >= minSuccessResultsForPrognoz) ||
                  (intervalForSearch == SchemaWorkAggrFullStatOuter.Interval7 && c.SuccessLaunchesCount7 >= minSuccessResultsForPrognoz) ||
@@ -997,8 +1137,17 @@ namespace ServiceCheck.Core
 
         public static PrognozBySchemaOuter SelectConnectionToProcess(List<SchemaWorkAggrFullStatOuter> statInfo, int minSuccessResultsForPrognoz)
         {
-            //TODO переработать
             PrognozBySchemaOuter res = null;
+            //TODO переработать, пока заглушка:
+            //{
+            //    res = new PrognozBySchemaOuter();
+            //    res.DbId = "ORCL12";
+            //    res.UserName = "mca_flex";
+            //    //res.DbFolder = "ORCL12";
+            //    res.DbLink = null;
+            //}
+
+
 
             var connToProcess = new List<SchemaWorkAggrFullStatOuter>();
             foreach (var stat in statInfo)
@@ -1028,42 +1177,54 @@ namespace ServiceCheck.Core
 
                 //пытаемся найти подходящую статистику за 7, 30, 90 или максимальный доступный интервал
                 //сначала для схемы, затем для БД, затем любую
-                newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName, statItem.DbLink,
                     minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval7);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,statItem.DbLink,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval30);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,statItem.DbLink,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval90);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,statItem.DbLink,
+                        minSuccessResultsForPrognoz, null);
+
+                newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName, null,
+                    minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval7);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval30);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,null,
+                        minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval90);
+                if (newItem == null)
+                    newItem = getStatForSchema(statInfo, statItem.DBId, statItem.UserName,null,
                         minSuccessResultsForPrognoz, null);
 
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null, null,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval7);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null, null,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval30);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null, null,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval90);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, statItem.DBId, null,
+                    newItem = getStatForSchema(statInfo, statItem.DBId, null, null,
                         minSuccessResultsForPrognoz, null);
 
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, null, null,
+                    newItem = getStatForSchema(statInfo, null, null, null,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval7);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, null, null,
+                    newItem = getStatForSchema(statInfo, null, null, null,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval30);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, null, null,
+                    newItem = getStatForSchema(statInfo, null, null, null,
                         minSuccessResultsForPrognoz, SchemaWorkAggrFullStatOuter.Interval90);
                 if (newItem == null)
-                    newItem = getStatForSchema(statInfo, null, null,
+                    newItem = getStatForSchema(statInfo, null, null, null,
                         minSuccessResultsForPrognoz, null);
 
                 //если что-то нашли в статистике
@@ -1075,7 +1236,7 @@ namespace ServiceCheck.Core
                 res.DbId = statItem.DBId.ToUpper();
                 res.UserName = statItem.UserName.ToUpper();
                 res.DbLink = statItem.DbLink.ToUpper();
-                res.DbFolder = statItem.DbFolder.ToUpper();
+                //res.DbFolder = statItem.DbFolder.ToUpper();
             }
             return res;
         }

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 
@@ -74,22 +75,35 @@ namespace ServiceCheckOuter
                 {
                     var dbIdC = connectionToProcess.DbId.ToUpper();
                     var userName = connectionToProcess.UserName.ToUpper();
-                    var dbLink = connectionToProcess.DbLink.ToUpper();
-                    var dbFolder = connectionToProcess.DbFolder.ToUpper();
+                    var dbLink = connectionToProcess.DbLink=="<NONE>"?null:connectionToProcess.DbLink;
                     var conn = settings.Connections.FirstOrDefault(c =>
                         c.DBIdC.ToUpper() == dbIdC && c.UserName.ToUpper() == userName);
+
+
+                    //TODO
+
+                    var connOuter =
+                        settings.SchedulerOuterSettings.ConnectionsOuterToProcess.ConnectionListToProcess
+                            .FirstOrDefault(c => c.DbId.ToUpper() == dbIdC && c.UserName.ToUpper() == userName);
+
+                    var dbOuter = connOuter.DbOuter.FirstOrDefault(c => c.DbLink == dbLink);
+                    var dbFolder = dbOuter.DbFolder.ToUpper();
+
                     ThreadInfoOuter threadInfo = new ThreadInfoOuter();
                     threadInfo.Connection = conn;
                     threadInfo.DbLink = dbLink;
                     threadInfo.DBSubfolder = dbFolder;
-                    //TODO
-                    threadInfo.SchemasInclude = new List<string>();
-                    threadInfo.SchemasExclude = new List<string>();
+                    threadInfo.SchemasInclude = dbOuter.UsersOuterIncludeC;
+                    threadInfo.SchemasExclude = dbOuter.UsersOuterExcludeC;
+                    threadInfo.SchemasExclude.AddRange(settings.SchedulerOuterSettings.SysUsersToExludeC);
+
+
 
 
                     threadInfo.ExportSettings = settings.ExportSettings;
                     var schemasToWorkInfo = logger.GetToWorkInfo(connectionToProcess, true);
-                    exporter.StartWork(threadInfo, schemasToWorkInfo, settings.TestMode);
+                    var grantsFolder = Path.Combine(settings.SchedulerOuterSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo, "grants");
+                    exporter.StartWork(threadInfo, schemasToWorkInfo, settings.TestMode, grantsFolder);
                 }
 
                 WaitBeforeExit();

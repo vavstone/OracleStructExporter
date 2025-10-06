@@ -8,6 +8,8 @@ namespace ServiceCheck.Core
     {
         public string ProcessId { get; set; }
         public Connection CurrentConnection { get; set; }
+        public string DbLink { get; set; }
+        public string DbFolder { get; set; }
 
         public string ObjectName { get; set; }
         public string ObjectType { get; set; }
@@ -15,11 +17,13 @@ namespace ServiceCheck.Core
         
         //public int TotalObjects { get; set; }
         public int? ProcessObjCountPlan { get; set; }
-        public int? SchemaObjCountPlan { get; set; }
+        public int? AllObjCountPlan { get; set; }
+        public int? SchemaOutObjCountPlan { get; set; }
         public int? TypeObjCountPlan { get; set; }
         public int? Current { get; set; }
         public int? ProcessObjCountFact { get; set; }
-        public int? SchemaObjCountFact { get; set; }
+        public int? AllObjCountFact { get; set; }
+        public int? SchemaOutObjCountFact { get; set; }
         public int? TypeObjCountFact { get; set; }
         public int? MetaObjCountFact { get; set; }
         public int? ErrorsCount { get; set; }
@@ -171,18 +175,34 @@ namespace ServiceCheck.Core
                 if (Stage == ExportProgressDataStageOuter.PROCESS_SCHEMA)
                 {
                     var connectAddStr = $"{CurrentConnection.UserName}@{CurrentConnection.DBIdC}";
+                    var dbFolder = GetTextAddInfo("DBFOLDER");
+                    var dbLink = GetTextAddInfo("DBLINK");
+                    if (string.IsNullOrWhiteSpace(dbLink))
+                        dbLink = "нет";
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Выгрузка объектов схемы {connectAddStr}...";
+                        return $"Выгрузка внешних объектов для схемы {connectAddStr} (DbLink: {dbLink}, DbFolder: {dbFolder})...";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
                         errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Объекты схемы {connectAddStr} ({SchemaObjCountFact} из {SchemaObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
+                    return $"Внешние объекты для схемы {connectAddStr} DbLink: {dbLink}, DbFolder: {dbFolder}) ({AllObjCountFact} из {AllObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
                 }
+
+                if (Stage == ExportProgressDataStageOuter.PROCESS_OUT_SCHEMA)
+                {
+                    var outSchemaName = GetTextAddInfo("OUTSCHEMANAME");
+                    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
+                        return $"Выгрузка объектов внешней схемы {outSchemaName} ({SchemaOutObjCountPlan} шт.)...";
+                    var errorsAddStr = "";
+                    if (ErrorsCount > 0)
+                        errorsAddStr = $". Ошибок: {ErrorsCount}";
+                    return $"Объекты внешней схемы {outSchemaName} ({SchemaOutObjCountFact} из {SchemaOutObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
+                }
+
                 if (Stage == ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Выгрузка объектов типа {ObjectType}...";
-                    return $"Объекты типа {ObjectType} ({TypeObjCountFact} из {TypeObjCountPlan}) выгружены{DurationString}";
+                        return $"Получение объектов типа {ObjectType}...";
+                    return $"Объекты типа {ObjectType} ({TypeObjCountFact} из {TypeObjCountPlan}) получены{DurationString}";
                 }
                 if (Stage == ExportProgressDataStageOuter.GET_INFO_ABOUT_SYS_VIEW)
                 {
@@ -194,8 +214,8 @@ namespace ServiceCheck.Core
                 if (Stage == ExportProgressDataStageOuter.GET_OBJECTS_NAMES)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Получение информации о списке объектов схемы...";
-                    return $"Информация о списке объектов схемы ({MetaObjCountFact} шт.) получена {DurationString}";
+                        return $"Получение информации о списке внешних объектов схемы...";
+                    return $"Информация о списке внешних объектов схемы ({MetaObjCountFact} шт.) получена {DurationString}";
                 }
                 if (Stage == ExportProgressDataStageOuter.GET_GRANTS)
                 {
@@ -349,26 +369,12 @@ namespace ServiceCheck.Core
                         return $"Перемещение файлов в папку main...";
                     return $"Файлы в main ({MetaObjCountFact} шт.) перемещены{DurationString}";
                 }
-                //if (Stage == ExportProgressDataStage.SEARCH_AND_DELETE_DUPLICATES_IN_MAIN_DIR)
-                //{
-                //    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                //        return $"Поиск и удаление дубликатов в main...";
-                //    if (MetaObjCountFact > 0)
-                //        return $"Дубликаты ({MetaObjCountFact} шт.) в папке {TextAddInfo} удалены{DurationString}";
-                //    return $"Дубликаты не найдены{DurationString}";
-                //}
                 if (Stage == ExportProgressDataStageOuter.CREATE_SIMPLE_FILE_REPO_COMMIT)
                 {
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
                         return $"Создание коммита в локальной файловой СКВ...";
                     return $"Коммит в локальной файловой СКВ создан ({MetaObjCountFact} изменений) {DurationString}";
                 }
-                //if (Stage == ExportProgressDataStage.CREATE_AND_SEND_GITLAB_COMMIT)
-                //{
-                //    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                //        return $"Создание и отправка commit в git...";
-                //    return $"Commit создан и отправлен в git{DurationString}";
-                //}
 
                 return GetTextAddInfo(null);
             }
@@ -435,6 +441,7 @@ namespace ServiceCheck.Core
                 return $" ({Duration.ToStringFormat(true)})";
             }
         }
+
 
         public ExportProgressDataOuter()
         {

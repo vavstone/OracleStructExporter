@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ServiceCheck.Core.Settings;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -14,7 +15,7 @@ namespace ServiceCheck.Core
         public string DBId { get; set; }
         public string UserName { get; set; }
         public string DbLink { get; set; }
-        public string DbFolder { get; set; }
+        //public string DbFolder { get; set; }
         public bool IsScheduled { get; set; }
         public int? OneTimePerHoursPlan { get; set; }
         public TimeSpan? TimeBeforePlanLaunch { get; set; }
@@ -70,7 +71,7 @@ namespace ServiceCheck.Core
         public double? AvgSuccessLaunchAllObjectsFactCount90 { get; set; }
         public double? AvgSuccessLaunchAllObjectsFactCount { get; set; }
 
-        static SchemaWorkStat GetStartItemAndDuration(SchemaWorkStat endItem, List<SchemaWorkStat> allItems, out TimeSpan? duration)
+        static SchemaWorkStatOuter GetStartItemAndDuration(SchemaWorkStatOuter endItem, List<SchemaWorkStatOuter> allItems, out TimeSpan? duration)
         {
             duration = default;
             var startItem = allItems.FirstOrDefault(c => c.ProcessId == endItem.ProcessId && c.Level == ExportProgressDataLevel.STAGESTARTINFO);
@@ -79,34 +80,42 @@ namespace ServiceCheck.Core
             return startItem;
         }
 
-        public static List<SchemaWorkAggrFullStat> GetAggrFullStat(List<SchemaWorkStat> plainStat, List<AppWorkStat> workStat, List<CommitStat> commitStat, List<ConnectionToProcess> scheduledConnections, int maxInterval)
+        public static List<SchemaWorkAggrFullStatOuter> GetAggrFullStat(List<SchemaWorkStatOuter> plainStat, List<AppWorkStat> workStat, List<CommitStat> commitStat, List<ConnectionOuterToProcess> scheduledConnections, int maxInterval)
         {
-            var statList = scheduledConnections.
-                //Select(c=>new Tuple<string,string>(c.DbId.ToUpper(),c.UserName.ToUpper())).
-                //Distinct().
-                Select(c => new SchemaWorkAggrFullStat
-                {
-                    DBId = c.DbId.ToUpper(),
-                    UserName = c.UserName.ToUpper(),
-                    OneTimePerHoursPlan = c.OneSuccessResultPerHours,
-                    IsScheduled = c.Enabled
-                }).ToList();
-            var notInitialCommits = commitStat.Where(c => !c.IsInitial).ToList();
-
-            foreach (var item in plainStat.Select(c=>new Tuple<string,string>(c.DBId, c.UserName)).Distinct())
+            var statList = new List<SchemaWorkAggrFullStatOuter>();
+            foreach (var connectionOuterToProcess in scheduledConnections)
             {
-                if (!statList.Any(c => c.DBId == item.Item1 && c.UserName == item.Item2))
+                foreach (var dbOuter in connectionOuterToProcess.DbOuter)
+                {
+                    var item = new SchemaWorkAggrFullStatOuter
+                    {
+                        DBId = connectionOuterToProcess.DbId.ToUpper(),
+                        UserName = connectionOuterToProcess.UserName.ToUpper(),
+                        DbLink = dbOuter.DbLink == null?"<NONE>": dbOuter.DbLink.ToUpper(),
+                        IsScheduled = dbOuter.Enabled,
+                        OneTimePerHoursPlan = dbOuter.OneSuccessResultPerHours
+                    };
+                    statList.Add(item);
+                }
+            }
+
+            foreach (var item in plainStat.Select(c=>new SchemaWorkAggrFullStatOuter {DBId = c.DBId, UserName = c.UserName, DbLink = c.DbLink}).Distinct())
+            {
+                if (!statList.Any(c => c.DBId == item.DBId && c.UserName == item.UserName && c.DbLink==item.DbLink))
                 {
 
-                    statList.Add(new SchemaWorkAggrFullStat
+                    statList.Add(new SchemaWorkAggrFullStatOuter
                     {
-                        DBId = item.Item1,
-                        UserName = item.Item2,
+                        DBId = item.DBId,
+                        UserName = item.UserName,
+                        DbLink = item.DbLink,
                         IsScheduled = false,
                         OneTimePerHoursPlan = null
                     });
                 }
             }
+
+            var notInitialCommits = commitStat.Where(c => !c.IsInitial).ToList();
 
             foreach (var statItem in statList)
             {
@@ -121,6 +130,7 @@ namespace ServiceCheck.Core
                 ThenBy(c => c.TimeBeforePlanLaunch ?? TimeSpan.MinValue).
                 ThenBy(c => c.DBId).
                 ThenBy(c => c.UserName).
+                ThenBy(c=>c.DbLink).
                 ToList();
 
             return res;
@@ -131,11 +141,11 @@ namespace ServiceCheck.Core
             return forDate - forDate.AddDays(-daysAgo);
         }
 
-        static void FillAggrFullStatItemForInterval(List<SchemaWorkStat> plainStat, List<AppWorkStat> workStat, List<CommitStat> commitStat, SchemaWorkAggrFullStat item, int maxInterval, int? interval)
+        static void FillAggrFullStatItemForInterval(List<SchemaWorkStatOuter> plainStat, List<AppWorkStat> workStat, List<CommitStat> commitStat, SchemaWorkAggrFullStatOuter item, int maxInterval, int? interval)
         {
             var now = DateTime.Now;
 
-            var curSchemaPlainStat = plainStat.Where(c => c.DBId == item.DBId && c.UserName == item.UserName).ToList();
+            var curSchemaPlainStat = plainStat.Where(c => c.DBId == item.DBId && c.UserName == item.UserName && c.DbLink==item.DbLink).ToList();
             var curSchemaPlainStatEnded = curSchemaPlainStat.Where(c => c.Level == ExportProgressDataLevel.STAGEENDINFO).ToList();
             var curSchemaPlainStatEndedInInterval = curSchemaPlainStatEnded
                 .Where(c => interval == null || c.EventTime >= now.AddDays(-interval.Value)).ToList();
@@ -161,11 +171,9 @@ namespace ServiceCheck.Core
                             item.LastSuccessLaunchDuration = duration;
                         if (startItem != null)
                         {
-                            var commit = commitStat.FirstOrDefault(c =>
-                                c.ProcessId == startItem.ProcessId && c.DBId == startItem.DBId &&
-                                c.UserName == startItem.UserName);
-                            if (commit != null)
-                                item.LastSuccessLaunchCommitObjectsFactCount = commit.AllCnt;
+                            var commits = commitStat.Where(c => c.ProcessId == startItem.ProcessId).ToList();
+                            if (commits.Any())
+                                item.LastSuccessLaunchCommitObjectsFactCount = commits.Sum(c => c.AllCnt);
                             else
                                 item.LastSuccessLaunchCommitObjectsFactCount = 0;
                         }
@@ -201,11 +209,9 @@ namespace ServiceCheck.Core
 
                     if (startItem != null)
                     {
-                        var commit = commitStat.FirstOrDefault(c =>
-                            c.ProcessId == startItem.ProcessId && c.DBId == startItem.DBId &&
-                            c.UserName == startItem.UserName);
-                        if (commit != null)
-                            commitsCountList.Add(commit.AllCnt);
+                        var commits = commitStat.Where(c => c.ProcessId == startItem.ProcessId).ToList();
+                        if (commits.Any())
+                            commitsCountList.Add(commits.Sum(c => c.AllCnt));
                         else
                             commitsCountList.Add(0);
                     }

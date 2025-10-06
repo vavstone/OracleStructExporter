@@ -8,13 +8,15 @@ namespace ServiceCheck.Core
 {
     public static class GrantsOuterManager
     {
-        public static void SaveGrantsForCurrentSchemaAndForPublic(List<GrantAttributes> grants, string vcsFolder, string dbName, string userName)
+        public static void SaveGrantsForCurrentSchemaAndForPublic(List<GrantAttributes> grants, string grantsFolder, string dbName, string userName)
         {
             
-            var grantsListFolder = Path.Combine(vcsFolder, "grants");
-            var grantsCurrUserFile = Path.Combine(grantsListFolder, $"{dbName}_{userName}.csv");
-            var grantsPublicFile = Path.Combine(grantsListFolder, $"{dbName}_PUBLIC.csv");
-            var grantsUnknownFile = Path.Combine(grantsListFolder, $"{dbName}_UNKNOWN_SCHEMA!!!.csv");
+            var grantsListFolder = Path.Combine(grantsFolder, dbName);
+            if (!Directory.Exists(grantsListFolder))
+                Directory.CreateDirectory(grantsListFolder);
+            var grantsCurrUserFile = Path.Combine(grantsListFolder, $"{userName}.csv");
+            var grantsPublicFile = Path.Combine(grantsListFolder, $"PUBLIC.csv");
+            var grantsUnknownFile = Path.Combine(grantsListFolder, $"UNKNOWN_SCHEMA!!!.csv");
             var newCurrUserGrands = new List<GrantAttributes>();
             var newPublicGrands = new List<GrantAttributes>();
             var newUnknownUserGrands = new List<GrantAttributes>();
@@ -33,38 +35,78 @@ namespace ServiceCheck.Core
             }
 
             var newData = new List<List<string>>();
-            foreach (var grant in newCurrUserGrands)
+            if (newCurrUserGrands.Any())
             {
-                var strAr = new List<string>
+                foreach (var grant in newCurrUserGrands)
                 {
-                    grant.ObjectName, grant.Privilege
-                };
-                newData.Add(strAr);
-            }
-            CSVWorker.WriteCsv(newData, ";", grantsCurrUserFile);
+                    var strAr = new List<string>
+                    {
+                        grant.ObjectSchema, grant.ObjectName, grant.Privilege, grant.Grantable, userName
+                    };
+                    newData.Add(strAr);
+                }
 
-            newData.Clear();
-            foreach (var grant in newPublicGrands)
-            {
-                var strAr = new List<string>
-                {
-                    grant.ObjectName, grant.Privilege
-                };
-                newData.Add(strAr);
+                CSVWorker.WriteCsv(newData, ";", grantsCurrUserFile);
             }
-            CSVWorker.WriteCsv(newData, ";", grantsPublicFile);
 
-            newData.Clear();
-            //не должны сюда попасть
-            foreach (var grant in newUnknownUserGrands)
+            if (newPublicGrands.Any())
             {
-                var strAr = new List<string>
+                newData.Clear();
+                foreach (var grant in newPublicGrands)
                 {
-                    grant.ObjectName, grant.Privilege, grantsCurrUserFile
-                };
-                newData.Add(strAr);
+                    var strAr = new List<string>
+                    {
+                        grant.ObjectSchema, grant.ObjectName, grant.Privilege, grant.Grantable, "PUBLIC"
+                    };
+                    newData.Add(strAr);
+                }
+                CSVWorker.WriteCsv(newData, ";", grantsPublicFile);
             }
-            CSVWorker.WriteCsv(newData, ";", grantsUnknownFile);
+
+            if (newUnknownUserGrands.Any())
+            {
+                //не должны сюда попасть
+                newData.Clear();
+                foreach (var grant in newUnknownUserGrands)
+                {
+                    var strAr = new List<string>
+                    {
+                        grant.ObjectSchema, grant.ObjectName, grant.Privilege, grant.Grantable, grant.Grantee
+                    };
+                    newData.Add(strAr);
+                }
+
+                CSVWorker.WriteCsv(newData, ";", grantsUnknownFile);
+            }
+        }
+
+
+
+        public static List<GrantAttributes> GetGrants(string grantsFolder, string dbName)
+        {
+            var res = new List<GrantAttributes>();
+            var grantsListFolder = Path.Combine(grantsFolder, dbName);
+            if (!Directory.Exists(grantsListFolder))
+                return null;
+
+            foreach (var grantFile in Directory.GetFiles(grantsListFolder))      
+            {
+               var data = CSVWorker.ReadCsv( grantFile, ";");
+               foreach (var row in data)
+               {
+                   var grant = new GrantAttributes
+                   {
+                       ObjectSchema = row[0],
+                       ObjectName = row[1],
+                       Privilege = row[2],
+                       Grantable = row[3],
+                       Grantee = row[4]
+                   };
+                   
+                   res.Add(grant);
+               }
+            }
+            return res;
         }
     }
 }

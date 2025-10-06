@@ -181,7 +181,7 @@ namespace ServiceCheck.Core
                 var targetFolder = _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo; //thread.ExportSettings.RepoSettings.SimpleFileRepo.PathToExportDataForRepo;
                 var vcsManager = new VcsManager();
                 //var currentRepoName = $"{thread.DBSubfolder}\\{thread.UserNameSubfolder}";
-                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.IgnoreDifferences, out changesCount, out repoChanges);
+                vcsManager.CreateCommit(sourceFolder, thread.DBSubfolder, thread.UserNameSubfolder, targetFolder, int.Parse(thread.ProcessId), thread.StartDateTime, _settings.SchedulerSettings.RepoSettings.SimpleFileRepo.IgnoreDifferences, false, out changesCount, out repoChanges);
             }
             catch (Exception ex)
             {
@@ -678,12 +678,12 @@ namespace ServiceCheck.Core
                                         }
                                         else if (objectType == "SYNONYMS")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSynonym(synonymsStructs, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSynonym(synonymsStructs, null, objectName,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
                                         else if (objectType == "SEQUENCES")
                                         {
-                                            ddl = DDLCreator.GetObjectDdlForSequence(sequencesStructs, objectName,
+                                            ddl = DDLCreator.GetObjectDdlForSequence(sequencesStructs, null, objectName,
                                                 exportSettingsDetails.SetSequencesValuesTo1,
                                                 exportSettingsDetails.AddSlashToC);
                                         }
@@ -702,7 +702,7 @@ namespace ServiceCheck.Core
                                                 tablesConstraints,
                                                 tablesIndexes, tablesComments, tablesAndViewsColumnsComments,
                                                 partTables,
-                                                objectName, userId, exportSettingsDetails.AddSlashToC);
+                                                objectName, userId, exportSettingsDetails.AddSlashToC, false);
                                         }
                                         else if (objectType == "JOBS")
                                         {
@@ -739,7 +739,7 @@ namespace ServiceCheck.Core
                                             ddl = DDLCreator.AddCreateOrReplace(objectSource);
                                         }
 
-                                        string objectGrants = DDLCreator.GetObjectGrants(grants, objectName,
+                                        string objectGrants = DDLCreator.GetObjectGrants(grants, userId, objectName,
                                             exportSettingsDetails.OrderGrantOptionsC);
                                         if (objectType != "PACKAGES")
                                         {

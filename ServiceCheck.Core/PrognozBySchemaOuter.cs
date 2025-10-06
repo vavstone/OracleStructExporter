@@ -8,7 +8,7 @@ namespace ServiceCheck.Core
         public string DbId { get; set; }
         public string UserName { get; set; }
         public string DbLink { get; set; }
-        public string DbFolder { get; set; }
+        //public string DbFolder { get; set; }
         
         public double? OjectsCount { get; set; }
         public double? DurationsInMinutes { get; set; }

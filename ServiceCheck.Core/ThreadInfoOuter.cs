@@ -36,12 +36,12 @@ namespace ServiceCheck.Core
             }
         }
 
-        public string UserNameSubfolder
-        {
-            get
-            {
-                return Connection.UserName.ToUpper();
-            }
-        }
+        //public string UserNameSubfolder
+        //{
+        //    get
+        //    {
+        //        return Connection.UserName.ToUpper();
+        //    }
+        //}
     }
 }

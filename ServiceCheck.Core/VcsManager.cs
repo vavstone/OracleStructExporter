@@ -182,7 +182,7 @@ namespace ServiceCheck.Core
         }
 
         public void CreateCommit(string inputFolder, string dbSubfolder, string userNameSubfolder, string vcsFolder,
-            int processId, DateTime commitDate, IgnoreDifferences ignoreDifferences, out int changesCount, out List<RepoChangeItem> repoChanges)
+            int processId, DateTime commitDate, IgnoreDifferences ignoreDifferences, bool ignoreRemovingItems, out int changesCount, out List<RepoChangeItem> repoChanges)
         {
             var repo = $"{dbSubfolder}\\{userNameSubfolder}";
             changesCount = 0;
@@ -221,7 +221,7 @@ namespace ServiceCheck.Core
                 string tmpDeltaPath = Path.Combine(currentCommitTmpDir, "new", repo);
                 CommitShortInfo commitShortInfo;
                 FilesManager.DeleteDirectory(tmpDeltaPath);
-                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, ignoreDifferences, out repoChanges, out commitShortInfo);
+                CompareAndCreateDelta(repoInputPath, previousSnapshotPath, tmpDeltaPath, processId, commitDate, dbSubfolder, userNameSubfolder, ignoreDifferences, ignoreRemovingItems, out repoChanges, out commitShortInfo);
                 
 
                 if (repoChanges.Any(c=>!c.MaskWorked))
@@ -358,7 +358,7 @@ namespace ServiceCheck.Core
             return filesCounter;
         }
 
-        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, IgnoreDifferences ignoreDifferences, out List<RepoChangeItem> repoChanges, out CommitShortInfo commitShortInfo)
+        private void CompareAndCreateDelta(string inputPath, string previousPath, string deltaPath, int processId, DateTime commitDate, string dbSubfolder, string userNameSubfolder, IgnoreDifferences ignoreDifferences, bool ignoreRemovingItems, out List<RepoChangeItem> repoChanges, out CommitShortInfo commitShortInfo)
         {
             repoChanges = new List<RepoChangeItem>();
             commitShortInfo = new CommitShortInfo();
@@ -416,34 +416,37 @@ namespace ServiceCheck.Core
             }
 
             // Обработка удаленных файлов
-            foreach (var file in previousFiles)
+            if (!ignoreRemovingItems)
             {
-                string relativePath = file.Substring(previousPath.Length + 1);
-                string inputFile = Path.Combine(inputPath, relativePath);
-
-                if (!File.Exists(inputFile))
+                foreach (var file in previousFiles)
                 {
-                    string deltaFile = Path.Combine(deltaPath, relativePath);
-                    Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
-                    File.WriteAllBytes(deltaFile, new byte[0]); // Пустой файл как флаг удаления
-                    commitShortInfo.FilesDeleteCount++;
-                    var currentFileFolder = FilesManager.GetCurrentFolderName(file);
-                    //удаленный файл
-                    var delItem = new RepoChangeItem
+                    string relativePath = file.Substring(previousPath.Length + 1);
+                    string inputFile = Path.Combine(inputPath, relativePath);
+
+                    if (!File.Exists(inputFile))
                     {
-                        FileName = Path.GetFileName(file),
-                        DBId = dbSubfolder,
-                        UserName = userNameSubfolder,
-                        ProcessId = processId,
-                        CommitCommonDate = commitDate,
-                        ObjectType = GetOracleObjTypeByFolderName(currentFileFolder),
-                        Operation = RepoOperation.DEL,
-                        IsInitial = false,
-                        CommitCurFileTime = FilesManager.GetLastFileDate(file),
-                        //здесь считаем размер прошлой версии удаленного файла, так как новая версия - всегда нулевая
-                        FileSize = FilesManager.GetFileSizeInBytes(file)
-                    };
-                    repoChanges.Add(delItem);
+                        string deltaFile = Path.Combine(deltaPath, relativePath);
+                        Directory.CreateDirectory(Path.GetDirectoryName(deltaFile));
+                        File.WriteAllBytes(deltaFile, new byte[0]); // Пустой файл как флаг удаления
+                        commitShortInfo.FilesDeleteCount++;
+                        var currentFileFolder = FilesManager.GetCurrentFolderName(file);
+                        //удаленный файл
+                        var delItem = new RepoChangeItem
+                        {
+                            FileName = Path.GetFileName(file),
+                            DBId = dbSubfolder,
+                            UserName = userNameSubfolder,
+                            ProcessId = processId,
+                            CommitCommonDate = commitDate,
+                            ObjectType = GetOracleObjTypeByFolderName(currentFileFolder),
+                            Operation = RepoOperation.DEL,
+                            IsInitial = false,
+                            CommitCurFileTime = FilesManager.GetLastFileDate(file),
+                            //здесь считаем размер прошлой версии удаленного файла, так как новая версия - всегда нулевая
+                            FileSize = FilesManager.GetFileSizeInBytes(file)
+                        };
+                        repoChanges.Add(delItem);
+                    }
                 }
             }
         }

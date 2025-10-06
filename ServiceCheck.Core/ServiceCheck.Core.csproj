@@ -50,6 +50,7 @@
     <Compile Include="CSVWorker.cs" />
     <Compile Include="DBStructs\DBMSJob.cs" />
     <Compile Include="DBStructs\DbLinkAttrigutes.cs" />
+    <Compile Include="DBStructs\DbPackageText.cs" />
     <Compile Include="DBStructs\DbObjectTextByLines.cs" />
     <Compile Include="DBStructs\DbObjectText.cs" />
     <Compile Include="DBStructs\SchedulerJobArgument.cs" />

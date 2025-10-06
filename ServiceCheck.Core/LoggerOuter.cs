@@ -110,8 +110,9 @@ namespace ServiceCheck.Core
                     //сохраняем в файл запись лога
                     var encodingToFile1251 = Encoding.GetEncoding(1251);
                     var pathToLog = _textFilesLog.PathToThreadsLogFilesC;
+                    var dbLinkAppend = string.IsNullOrWhiteSpace(progressData.DbLink) ? "" : "_" + progressData.DbLink;
                     var fileName = Path.Combine(pathToLog,
-                        $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}{PeriodAppendToLogFileName(_textFilesLog.ThreadLogSplitPeriod)}.txt");
+                        $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}{dbLinkAppend}{PeriodAppendToLogFileName(_textFilesLog.ThreadLogSplitPeriod)}.txt");
 
                     lock (lockObj1)
                     {
@@ -139,6 +140,7 @@ namespace ServiceCheck.Core
             {
 
                 var commitsList = progressData.GetAddInfo<List<RepoChangeItem>>("REPO_CHANGES");
+                var outerSchema = progressData.GetAddInfo<string>("OUTER_SCHEMA");
                 var info = GetCommitInfo(commitsList);
                 if (info != null)
                 {
@@ -153,7 +155,7 @@ namespace ServiceCheck.Core
                     var encodingToFile1251 = Encoding.GetEncoding(1251);
                     var pathToLog = _textFilesLog.PathToLogCommitsFilesC;
                     var fileName = Path.Combine(pathToLog,
-                        $"{progressData.CurrentConnection.DBIdCForFileSystem}_{progressData.CurrentConnection.UserName}_commits{PeriodAppendToLogFileName(_textFilesLog.LogCommitSplitPeriod)}.txt");
+                        $"{progressData.DbFolder}_{outerSchema}_commits{PeriodAppendToLogFileName(_textFilesLog.LogCommitSplitPeriod)}.txt");
                     lock (lockObj2)
                     {
                         if (!Directory.Exists(pathToLog))
@@ -268,8 +270,7 @@ namespace ServiceCheck.Core
                 //if (_logSettings.DBLog.Enabled)
                 //{
                     //сохраняем в файл запись лога
-                    DbWorkerOuter.SaveConnWorkLogInDB(_dbLog.DBLogPrefix, progressData, connectionString,
-                        dbLogSettings);
+                    DbWorkerOuter.SaveConnWorkLogInDB(_dbLog.DBLogPrefix, progressData, connectionString, dbLogSettings);
                 //}
             }
 
@@ -295,7 +296,6 @@ namespace ServiceCheck.Core
 
         public string GetStatInfoV2(List<SchemaWorkAggrFullStatOuter> statList, int lastDaysToAnalyz)
         {
-            //TODO переработать
             if (statList.Any())
             {
                 var table = new TableBuilder.TableBuilder();
@@ -306,6 +306,7 @@ namespace ServiceCheck.Core
                 {
                     new Column {Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left},
                     new Column {Id = "username", MaxWidth = 30, Alignment = Alignment.Left},
+                    new Column {Id = "dblink", MaxWidth = 30, Alignment = Alignment.Left},
                     new Column {Id = "plan", MaxWidth = 7, Alignment = Alignment.Center},
                     new Column {Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right},
                     new Column {Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right},
@@ -324,13 +325,14 @@ namespace ServiceCheck.Core
                 headerRows.Add(new List<HeaderCell>
                 {
                     new HeaderCell
-                        {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 12}
+                        {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 13}
                 });
 
                 headerRows.Add(new List<HeaderCell>
                 {
                     new HeaderCell {Content = "БД", ColumnId = "dbid", RowSpan = 2},
                     new HeaderCell {Content = "Схема", ColumnId = "username", RowSpan = 2},
+                    new HeaderCell {Content = "DbLink", ColumnId = "dblink", RowSpan = 2},
                     new HeaderCell {Content = "План", ColumnId = "plan", RowSpan = 2},
                     new HeaderCell {Content = "Время до планового запуска", ColumnId = "timebeforeplan", RowSpan = 2},
                     new HeaderCell {Content = "Раз в X часов", ColumnId = "oneinhoursplan", ColSpan = 2},
@@ -370,6 +372,11 @@ namespace ServiceCheck.Core
                         {
                             Content = statItem.UserName,
                             ColumnId = "username"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.DbLink,
+                            ColumnId = "dblink"
                         },
                         new DataCell
                         {
@@ -448,7 +455,6 @@ namespace ServiceCheck.Core
 
         public string GetStatFullInfo(List<SchemaWorkAggrFullStatOuter> statList, int lastDaysToAnalyz)
         {
-            //TODO переработать
             if (statList.Any())
             {
                 var table = new TableBuilder.TableBuilder();
@@ -459,6 +465,7 @@ namespace ServiceCheck.Core
                 {
                     new Column {Id = "dbid", MaxWidth = 30, Alignment = Alignment.Left},
                     new Column {Id = "username", MaxWidth = 30, Alignment = Alignment.Left},
+                    new Column {Id = "dblink", MaxWidth = 30, Alignment = Alignment.Left},
                     new Column {Id = "plan", MaxWidth = 7, Alignment = Alignment.Center},
                     new Column {Id = "timebeforeplan", MaxWidth = 24, Alignment = Alignment.Right},
                     new Column {Id = "oneinhoursplan", MaxWidth = 10, Alignment = Alignment.Right},
@@ -508,13 +515,14 @@ namespace ServiceCheck.Core
                 headerRows.Add(new List<HeaderCell>
                 {
                     new HeaderCell
-                        {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 42}
+                        {Content = $"Статистика за последние {lastDaysToAnalyz} дней ", ColumnId = "dbid", ColSpan = 43}
                 });
 
                 headerRows.Add(new List<HeaderCell>
                 {
                     new HeaderCell {Content = "БД", ColumnId = "dbid", RowSpan = 2},
                     new HeaderCell {Content = "Схема", ColumnId = "username", RowSpan = 2},
+                    new HeaderCell {Content = "DbLink", ColumnId = "dblink", RowSpan = 2},
                     new HeaderCell {Content = "План", ColumnId = "plan", RowSpan = 2},
                     new HeaderCell {Content = "Время до планового запуска", ColumnId = "timebeforeplan", RowSpan = 2},
 
@@ -604,6 +612,11 @@ namespace ServiceCheck.Core
                         {
                             Content = statItem.UserName,
                             ColumnId = "username"
+                        },
+                        new DataCell
+                        {
+                            Content = statItem.DbLink,
+                            ColumnId = "dblink"
                         },
                         new DataCell
                         {
@@ -973,7 +986,8 @@ namespace ServiceCheck.Core
             columns.AddRange(new[]
             {
                 new Column {Id = "dbid", MinWidth = 30, Alignment = Alignment.Left},
-                new Column {Id = "username", MinWidth = 30, Alignment = Alignment.Left}
+                new Column {Id = "username", MinWidth = 30, Alignment = Alignment.Left},
+                new Column {Id = "dblink", MinWidth = 30, Alignment = Alignment.Left}
             });
             if (usePrognozInfo)
             {
@@ -992,6 +1006,7 @@ namespace ServiceCheck.Core
 
             headerCells.Add(new HeaderCell { Content = "БД", ColumnId = "dbid" });
             headerCells.Add(new HeaderCell { Content = "Схема", ColumnId = "username" });
+            headerCells.Add(new HeaderCell { Content = "DbLink", ColumnId = "dblink" });
 
             if (usePrognozInfo)
             {
@@ -1013,6 +1028,11 @@ namespace ServiceCheck.Core
                 {
                     Content = prognozItem.UserName,
                     ColumnId = "username"
+                });
+                dataRow.Add(new DataCell
+                {
+                    Content = prognozItem.DbLink,
+                    ColumnId = "dblink"
                 });
                 if (usePrognozInfo)
                 {

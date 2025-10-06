@@ -113,11 +113,11 @@ namespace ServiceCheck.Core
             return ddl.ToString();
         }
 
-        public static string GetObjectGrants(List<GrantAttributes> grantsAttributes, string objectName,
+        public static string GetObjectGrants(List<GrantAttributes> grantsAttributes, string schemaName, string objectName,
             List<string> orderGrantOptions)
         {
             StringBuilder grants = new StringBuilder();
-            var attr = grantsAttributes.Where(c => c.ObjectName.ToUpper() == objectName.ToUpper()).ToList();
+            var attr = grantsAttributes.Where(c => (c.ObjectSchema == null || c.ObjectSchema.ToUpper()==schemaName.ToUpper()) &&  c.ObjectName.ToUpper() == objectName.ToUpper()).ToList();
             foreach (var granteeInfo in attr.GroupBy(c => c.Grantee)
                          .OrderBy(c => c.Key, new OracleLikeStringComparer()))
             {
@@ -148,8 +148,7 @@ namespace ServiceCheck.Core
             return grants.ToString();
         }
 
-        static string GetContstraintText(ConstraintStruct constraint, List<ConstraintStruct> constraints,
-            string schemaName)
+        static string GetContstraintText(ConstraintStruct constraint,/* List<ConstraintStruct> constraints, */string schemaName, bool skipAbsenceForignKeys)
         {
             StringBuilder sb = new StringBuilder();
             var addConstrNameStr = constraint.Generated == "USER NAME"
@@ -191,14 +190,14 @@ namespace ServiceCheck.Core
                     ? constraint.ROwner.ToUpper() + "."
                     : "";
                 var outerConstraint = constraint.ReferenceConstraint;
-                if (outerConstraint == null)
+                if (outerConstraint != null)
                 {
-                    throw new Exception($"Не загружена информация о связанном ключе {constraint.RConstraintName}!");
+                    sb.AppendLine("");
+                    sb.Append(
+                        $"  references {addSchemaInfo}{outerConstraint.TableName} {getMergedColumns(outerConstraint.ConstraintColumnStructs.OrderBy(c => c.Position).Select(c => c.ColumnName).ToList())}");
                 }
-
-                sb.AppendLine("");
-                sb.Append(
-                    $"  references {addSchemaInfo}{outerConstraint.TableName} {getMergedColumns(outerConstraint.ConstraintColumnStructs.OrderBy(c => c.Position).Select(c => c.ColumnName).ToList())}");
+                if (!skipAbsenceForignKeys)
+                    throw new Exception($"Не загружена информация о связанном ключе {constraint.RConstraintName}!");
             }
 
             if (!string.IsNullOrWhiteSpace(constraint.DeleteRule) && constraint.DeleteRule != "NO ACTION")
@@ -398,7 +397,8 @@ namespace ServiceCheck.Core
             List<PartTables> partTables,
             string objectName,
             string owner,
-            List<string> addSlashTo)
+            List<string> addSlashTo,
+            bool skipAbsenceForignKeys)
         {
             var objectNameUpper = objectName.ToUpper();
             var curTableStruct = tablesStructs.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
@@ -581,7 +581,7 @@ namespace ServiceCheck.Core
             {
                 sb.Append(",");
                 sb.AppendLine("");
-                sb.Append(" " + GetContstraintText(constraint, tablesConstraints, owner));
+                sb.Append(" " + GetContstraintText(constraint, /*tablesConstraints,*/ owner, skipAbsenceForignKeys));
             }
 
             sb.AppendLine();
@@ -771,7 +771,7 @@ namespace ServiceCheck.Core
                 sb.AppendLine("");
                 sb.AppendLine($"alter table {objectNameUpper}");
                 sb.Append("  add");
-                sb.Append(GetContstraintText(constraint, tablesConstraints, owner));
+                sb.Append(GetContstraintText(constraint, /*tablesConstraints,*/ owner, skipAbsenceForignKeys));
                 sb.Append(";");
                 if (constraint.BindedIndexStruct != null && constraint.BindedIndexStruct.Logging == "NO")
                 {
