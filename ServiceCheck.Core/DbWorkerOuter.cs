@@ -41,8 +41,6 @@ namespace ServiceCheck.Core
         }
 
 
-
-
         public List<ObjectTypeNames> GetObjectsNames(List<string> objectTypesList, string schemasIncludeStr, string schemasExcludeStr, ExportProgressDataStageOuter stage, out bool canceledByUser)
         {
             
@@ -60,7 +58,7 @@ namespace ServiceCheck.Core
             var progressData = new ExportProgressDataOuter(ExportProgressDataLevel.STAGESTARTINFO, stage);
             _progressDataManager.ReportCurrentProgress(progressData);
 
-            var objTypesList2 = objectTypesList.Select(c => GetObjectTypeName(c)).ToList();
+            var objTypesList2 = objectTypesList.Select(c => Common.GetObjectTypeName(c)).ToList();
             if (objTypesList2.Contains("PACKAGE"))
                 objTypesList2.Add("PACKAGE BODY");
 
@@ -80,9 +78,20 @@ namespace ServiceCheck.Core
                             while (reader.Read())
                             {
                                 var item = new ObjectTypeName();
-                                item.SchemaName = reader["owner"].ToString();
-                                item.ObjectType = reader["object_type"].ToString();
+                                item.Owner = reader["owner"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("object_type")))
+                                    item.ObjectType = reader["object_type"].ToString();
                                 item.ObjectName = reader["object_name"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("object_id")))
+                                    item.ObjectId = reader.GetInt32(reader.GetOrdinal("object_id"));
+                                if (!reader.IsDBNull(reader.GetOrdinal("created")))
+                                    item.Created = reader.GetDateTime(reader.GetOrdinal("created"));
+                                if (!reader.IsDBNull(reader.GetOrdinal("last_ddl_time")))
+                                    item.LastDDLTime = reader.GetDateTime(reader.GetOrdinal("last_ddl_time"));
+                                if (!reader.IsDBNull(reader.GetOrdinal("status")))
+                                    item.Status = reader["status"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("generated")))
+                                    item.Generated = reader["generated"].ToString();
                                 items.Add(item);
                             }
                         }
@@ -99,9 +108,11 @@ namespace ServiceCheck.Core
                             while (reader.Read())
                             {
                                 var item = new ObjectTypeName();
-                                item.SchemaName = reader["owner"].ToString();
+                                item.Owner = reader["owner"].ToString();
                                 item.ObjectType = reader["object_type"].ToString();
                                 item.ObjectName = reader["object_name"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("status")))
+                                    item.Status = reader["status"].ToString();
                                 items.Add(item);
                             }
                         }
@@ -110,17 +121,37 @@ namespace ServiceCheck.Core
 
                 foreach (var item in items)
                 {
-                    var type = item.ObjectType == "PACKAGE BODY" ? "PACKAGE" : item.ObjectType;
-                    type = GetObjectTypeNameReverse(type);
+                    string type;
+                    switch (item.ObjectType)
+                    {
+                        case "PACKAGE BODY":
+                            type = "PACKAGE";
+                            break;
+                        case "DATABASE LINK":
+                            type = "DB_LINK";
+                            break;
+                        case "SCHEDULER_JOB":
+                            type = "JOB";
+                            break;
+                        case "DBMS_JOB":
+                            type = "JOB";
+                            break;
+                        default:
+                            type = item.ObjectType;
+                            break;
+                    }
+
+                    var typeCommonName = Common.GetObjectTypeNameReverse(type);
                     ObjectTypeNames resItem = res.FirstOrDefault(c =>
-                        c.SchemaName == item.SchemaName && c.ObjectType == type);
+                        c.SchemaName == item.Owner && c.ObjectType == typeCommonName);
                     if (resItem == null)
                     {
-                        resItem = new ObjectTypeNames {SchemaName = item.SchemaName, ObjectType = type};
+                        resItem = new ObjectTypeNames {SchemaName = item.Owner, ObjectType = typeCommonName};
                         res.Add(resItem);
                     }
-                    if (resItem.ObjectNames.All(c => c != item.ObjectName))
-                        resItem.ObjectNames.Add(item.ObjectName);
+                    if (resItem.Objects.All(c => c.ObjectName != item.ObjectName ||
+                                                 (type=="PACKAGE" && c.ObjectType!=item.ObjectType)))
+                        resItem.Objects.Add(item);
                 }
 
             }
@@ -133,7 +164,7 @@ namespace ServiceCheck.Core
             }
 
             var progressData2 = new ExportProgressDataOuter(ExportProgressDataLevel.STAGEENDINFO, stage);
-            var counter = res.Sum(c => c.ObjectNames.Count);
+            var counter = res.Sum(c => c.UniqueNames.Count);
             progressData2.AllObjCountPlan = counter;
             progressData2.MetaObjCountFact = counter;
             _progressDataManager.ReportCurrentProgress(progressData2);
@@ -141,35 +172,13 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        // Сопоставление типов объектов с их представлениями в БД
-        static readonly Dictionary<string, string> objectTypeMapping = new Dictionary<string, string>
-        {
-            {"FUNCTIONS", "FUNCTION"},
-            {"PACKAGES", "PACKAGE"},
-            {"PROCEDURES", "PROCEDURE"},
-            {"SEQUENCES", "SEQUENCE"},
-            {"SYNONYMS", "SYNONYM"},
-            {"TABLES", "TABLE"},
-            {"TRIGGERS", "TRIGGER"},
-            {"TYPES", "TYPE"},
-            {"VIEWS", "VIEW"},
-            {"JOBS", "JOB"},
-            {"DBLINKS", "DB_LINK"}
-        };
+        
 
-        public static string GetObjectTypeName(string objectTypeCommonName)
-        {
-            return objectTypeMapping[objectTypeCommonName];
-        }
-
-        public static string GetObjectTypeNameReverse(string typeName)
-        {
-            return objectTypeMapping.FirstOrDefault(c => c.Value==typeName).Key;
-        }
+        
 
         public string GetObjectSource(string objectName, string objectType, List<string> addSlashTo, ExportProgressDataStageOuter stage, int schemaObjCountPlan, int typeObjCountPlan, int current,out bool canceledByUser)
         {
-            string dbObjectType = GetObjectTypeName(objectType);
+            string dbObjectType = Common.GetObjectTypeName(objectType);
             const string sourceQuery = @"
                 SELECT text 
                 FROM user_source 
@@ -254,16 +263,16 @@ namespace ServiceCheck.Core
             var dbLinkAppend = string.IsNullOrWhiteSpace(_dbLink) ? "" : "@" + _dbLink;
             if (!isJobs)
             {
-                var objTypesStr = objectTypesList.MergeFormatted("'", ",");
-                return $"SELECT owner, object_type, object_name FROM all_objects{dbLinkAppend} WHERE OBJECT_TYPE IN ({objTypesStr}){strInclude}{strExclude}";
+                var objTypesStr = objectTypesList.Select(c=>c=="DB_LINK"?"DATABASE LINK":c).ToList().MergeFormatted("'", ",");
+                return $"SELECT owner, object_type, object_name, object_id, created, last_ddl_time, status, generated FROM all_objects{dbLinkAppend} WHERE OBJECT_TYPE IN ({objTypesStr}){strInclude}{strExclude}";
             }
             else
             {
                 var strIncludeForDBMSJob = string.IsNullOrWhiteSpace(ownersInclude) ? "" : $" AND schema_user IN ({ownersInclude})";
                 var strExcludeForDBMSJob = string.IsNullOrWhiteSpace(ownersExclude) ? "" : $" AND schema_user NOT IN ({ownersExclude})";
-                return $"SELECT owner, 'SCHEDULER_JOB' object_type, job_name object_name FROM all_scheduler_jobs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}" +
-                       "UNION ALL " +
-                       $"SELECT schema_user owner, 'DBMS_JOB' object_type, to_char(job) object_name from all_jobs{dbLinkAppend} WHERE 1=1{strIncludeForDBMSJob}{strExcludeForDBMSJob}";
+                return $"SELECT owner, 'SCHEDULER_JOB' object_type, job_name object_name, state status FROM all_scheduler_jobs{dbLinkAppend} WHERE 1=1{strInclude}{strExclude}" +
+                       " UNION ALL " +
+                       $"SELECT schema_user owner, 'DBMS_JOB' object_type, to_char(job) object_name, decode(broken,'Y','BROKEN','N','VALID',null) status from all_jobs{dbLinkAppend} WHERE 1=1{strIncludeForDBMSJob}{strExcludeForDBMSJob}";
             }
         }
 
@@ -303,6 +312,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SynonymAttributes();
+                            item.Owner = reader["owner"].ToString();
                             item.Name = reader["synonym_name"].ToString();
                             item.TargetSchema = reader["table_owner"].ToString();
                             item.TargetObjectName = reader["table_name"].ToString();
@@ -375,9 +385,7 @@ namespace ServiceCheck.Core
                             if (!reader.IsDBNull(reader.GetOrdinal("max_value")))
                             {
                                 item.MaxValue = reader.GetDecimal(reader.GetOrdinal("max_value"));
-
                             }
-
                             item.IncrementBy = reader.GetInt32(reader.GetOrdinal("increment_by"));
                             item.CycleFlag = reader["cycle_flag"].ToString();
                             item.OrderFlag = reader["order_flag"].ToString();
@@ -1792,7 +1800,7 @@ namespace ServiceCheck.Core
 
             string ddlQuery = $@"SELECT dbms_metadata.get_ddl{dbLinkAppend}(:objectType, :objectName) AS ddl FROM dual";
 
-            string dbObjectType = GetObjectTypeName(objectTypeMulti);
+            string dbObjectType = Common.GetObjectTypeName(objectTypeMulti);
 
             if (_cancellationToken.IsCancellationRequested)
             {
@@ -1841,7 +1849,7 @@ namespace ServiceCheck.Core
                 if (dbObjectType == "SEQUENCE")
                 {
                     if (setSequencesValuesTo1)
-                        ddl = ResetStartSequenceValue(ddl);
+                        ddl = Common.ResetStartSequenceValue(ddl);
                 }
 
                 if (addSlashTo.Contains(objectTypeMulti))
@@ -1870,19 +1878,6 @@ namespace ServiceCheck.Core
             _progressDataManager.ReportCurrentProgress(progressData2);
 
             return ddl;
-        }
-
-        public static string ResetStartSequenceValue(string sql)
-        {
-            string pattern = @"(START\s+WITH\s+)(\d+)";
-
-            string result = Regex.Replace(
-                sql,
-                pattern,
-                match => match.Groups[1].Value + "1",
-                RegexOptions.IgnoreCase
-            );
-            return result;
         }
 
         public void SetSessionTransform(Dictionary<string,string> sessionTransform)

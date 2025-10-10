@@ -23,6 +23,7 @@ namespace ServiceCheck.Core
         public int? TypeObjCountFact { get; set; }
         public int? MetaObjCountFact { get; set; }
         public int? ErrorsCount { get; set; }
+        public int? WarningsCount { get; set; }
 
         public List<RepoChangeItem> RepoChangesPlainList
         {
@@ -144,6 +145,7 @@ namespace ServiceCheck.Core
                 if (Level == ExportProgressDataLevel.ERROR) return $"Ошибка{objectAddStr}! {Error}";
                 if (Level == ExportProgressDataLevel.CANCEL) return "Операция отменена пользователем!";
                 if (Level == ExportProgressDataLevel.MOMENTALEVENTINFO) return GetTextAddInfo("MOMENTAL_INFO");
+                if (Level == ExportProgressDataLevel.WARNING) return GetTextAddInfo("WARNING_INFO");
 
 
                 if (Stage == ExportProgressDataStage.PROCESS_MAIN)
@@ -152,20 +154,22 @@ namespace ServiceCheck.Core
                         return $"Запуск работы по:{Environment.NewLine}{GetTextAddInfo("SCHEMAS_TO_WORK")}";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
-                        errorsAddStr = $"{Environment.NewLine}Ошибок: {ErrorsCount}";
+                        errorsAddStr = $"{Environment.NewLine}Ошибок: {ErrorsCount}.";
+                    var warningsAddStr = "";
+                    if (WarningsCount > 0)
+                        warningsAddStr = $"{Environment.NewLine}Предупреждений: {WarningsCount}.";
                     var schemasAddStr = "";
                     var schemasSuccess = GetTextAddInfo("SCHEMAS_SUCCESS");
                     var schemasError = GetTextAddInfo("SCHEMAS_ERROR");
+                    var schemasWarning = GetTextAddInfo("SCHEMAS_WARNING");
                     if (!string.IsNullOrEmpty(schemasSuccess))
                         schemasAddStr += $"{Environment.NewLine}Успешно: {schemasSuccess}.";
                     if (!string.IsNullOrEmpty(schemasError))
-                    {
-                        //if (!string.IsNullOrWhiteSpace(schemasAddStr))
-                        //    schemasAddStr += " ";
                         schemasAddStr += $"{Environment.NewLine}Ошибки: {schemasError}.";
-                    }
+                    if (!string.IsNullOrEmpty(schemasWarning))
+                        schemasAddStr += $"{Environment.NewLine}Предупреждения: {schemasWarning}.";
 
-                    return $"Завершение работы.{schemasAddStr}{Environment.NewLine}Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{DurationString}.{errorsAddStr}";
+                    return $"Завершение работы.{schemasAddStr}{Environment.NewLine}Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{DurationString}.{errorsAddStr}{warningsAddStr}";
                 }
 
                 if (Stage == ExportProgressDataStage.PROCESS_SCHEMA)
@@ -175,8 +179,11 @@ namespace ServiceCheck.Core
                         return $"Выгрузка объектов схемы {connectAddStr}...";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
-                        errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Объекты схемы {connectAddStr} ({SchemaObjCountFact} из {SchemaObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
+                        errorsAddStr = $" Ошибок: {ErrorsCount}.";
+                    var warningsAddStr = "";
+                    if (WarningsCount > 0)
+                        warningsAddStr = $" Предупреждений: {WarningsCount}.";
+                    return $"Объекты схемы {connectAddStr} ({SchemaObjCountFact} из {SchemaObjCountPlan}) выгружены{DurationString}.{errorsAddStr}{warningsAddStr}";
                 }
                 if (Stage == ExportProgressDataStage.PROCESS_OBJECT_TYPE)
                 {

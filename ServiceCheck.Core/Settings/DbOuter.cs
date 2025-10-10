@@ -16,6 +16,8 @@ namespace ServiceCheck.Core
         public int OneSuccessResultPerHours { get; set; }
         [XmlAttribute]
         public bool Enabled { get; set; }
+        [XmlAttribute]
+        public string Mode { get; set; }
 
         [XmlElement]
         public string UsersOuterInclude { get; set; }

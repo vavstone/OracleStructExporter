@@ -4,10 +4,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{348BE40A-130A-47A1-849F-E861995EF24C}</ProjectGuid>
+    <ProjectGuid>{9C53863F-5E4B-4854-ADB1-73C3783E9481}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>ServiceCheckOuter</RootNamespace>
-    <AssemblyName>ServiceCheckOuter</AssemblyName>
+    <RootNamespace>ServiceCheckOuterObjList</RootNamespace>
+    <AssemblyName>ServiceCheckOuterObjList</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -45,15 +45,15 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="OSESettings.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ServiceCheck.Core\ServiceCheck.Core.csproj">
       <Project>{81c4aa3d-a522-41b7-88f1-d3a519597b76}</Project>
       <Name>ServiceCheck.Core</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="OSESettings.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

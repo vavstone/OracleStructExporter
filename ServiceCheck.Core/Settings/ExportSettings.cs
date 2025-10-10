@@ -1,4 +1,5 @@
 ﻿using System.Xml.Serialization;
+using ServiceCheck.Core.Settings;
 
 namespace ServiceCheck.Core
 {
@@ -7,6 +8,9 @@ namespace ServiceCheck.Core
         //общая
         [XmlElement]
         public string PathToExportDataMain { get; set; }
+
+        public ObjectsListSaveSettings ObjectsListSaveSettings { get; set; }
+
         public ExportSettingsDetails ExportSettingsDetails { get; set; }
 
         //[XmlElement]

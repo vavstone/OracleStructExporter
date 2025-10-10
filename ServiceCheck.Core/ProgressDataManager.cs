@@ -26,6 +26,14 @@ namespace ServiceCheck.Core
             }
         }
 
+        public int CurrentThreadWarningsCount
+        {
+            get
+            {
+                return ProgressDataList.Where(c => c.Level == ExportProgressDataLevel.WARNING).Count();
+            }
+        }
+
         public int ChildThreadsErrorsCount
         {
             get
@@ -37,11 +45,30 @@ namespace ServiceCheck.Core
             }
         }
 
+        public int ChildThreadsWarningsCount
+        {
+            get
+            {
+                var warningsCount = 0;
+                if (ChildProgressManagers.Any())
+                    warningsCount += ChildProgressManagers.Sum(c => c.CurrentThreadWarningsCount);
+                return warningsCount;
+            }
+        }
+
         public int AllErrorsCount
         {
             get
             {
                 return CurrentThreadErrorsCount + ChildThreadsErrorsCount;
+            }
+        }
+
+        public int AllWarningsCount
+        {
+            get
+            {
+                return CurrentThreadWarningsCount + ChildThreadsWarningsCount;
             }
         }
 
@@ -86,6 +113,8 @@ namespace ServiceCheck.Core
                 return ChildProgressManagers.Sum(c => c.CurrentThreadSchemaObjCountFact);
             }
         }
+
+        
 
 
         public ProgressDataManager(IProgress<ExportProgressData> progressReporter)

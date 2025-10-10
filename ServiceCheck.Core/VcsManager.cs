@@ -180,7 +180,19 @@ namespace ServiceCheck.Core
                 }
             }
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="inputFolder"></param>
+        /// <param name="dbSubfolder"></param>
+        /// <param name="userNameSubfolder"></param>
+        /// <param name="vcsFolder"></param>
+        /// <param name="processId"></param>
+        /// <param name="commitDate"></param>
+        /// <param name="ignoreDifferences"></param>
+        /// <param name="ignoreRemovingItems">Если true, то не удаляем в репо файл, даже если он пропал в исходной папке. Необходимости в данном параметре пока нет, поэтому рекомендуется выставлять false</param>
+        /// <param name="changesCount"></param>
+        /// <param name="repoChanges"></param>
         public void CreateCommit(string inputFolder, string dbSubfolder, string userNameSubfolder, string vcsFolder,
             int processId, DateTime commitDate, IgnoreDifferences ignoreDifferences, bool ignoreRemovingItems, out int changesCount, out List<RepoChangeItem> repoChanges)
         {

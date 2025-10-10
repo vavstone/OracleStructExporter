@@ -20,11 +20,29 @@ namespace ServiceCheck.Core
             _processId = id;
         }
 
+        public int CurrentThreadErrorsCountBySchemaOutName(string schemaOutName)
+        {
+            return ProgressDataList.Where(c => c.Level == ExportProgressDataLevel.ERROR && c.SchemaOutName == schemaOutName).Count();
+        }
+
+        public int CurrentThreadWarningsCountBySchemaOutName(string schemaOutName)
+        {
+            return ProgressDataList.Where(c => c.Level == ExportProgressDataLevel.WARNING && c.SchemaOutName == schemaOutName).Count();
+        }
+
         public int CurrentThreadErrorsCount
         {
             get
             {
                 return ProgressDataList.Where(c => c.Level == ExportProgressDataLevel.ERROR).Count();
+            }
+        }
+
+        public int CurrentThreadWarningsCount
+        {
+            get
+            {
+                return ProgressDataList.Where(c => c.Level == ExportProgressDataLevel.WARNING).Count();
             }
         }
 
@@ -39,11 +57,32 @@ namespace ServiceCheck.Core
             }
         }
 
+        public int ChildThreadsWarningsCount
+        {
+            get
+            {
+                var warningsCount = 0;
+                if (ChildProgressManagers.Any())
+                    warningsCount += ChildProgressManagers.Sum(c => c.CurrentThreadWarningsCount);
+                return warningsCount;
+            }
+        }
+
+
+
         public int AllErrorsCount
         {
             get
             {
                 return CurrentThreadErrorsCount + ChildThreadsErrorsCount;
+            }
+        }
+
+        public int AllWarningsCount
+        {
+            get
+            {
+                return CurrentThreadWarningsCount + ChildThreadsWarningsCount;
             }
         }
 
@@ -121,7 +160,8 @@ namespace ServiceCheck.Core
                     c.Level == ExportProgressDataLevel.STAGESTARTINFO &&
                     c.Stage == progressData.Stage &&
                     (string.IsNullOrWhiteSpace(progressData.ObjectName) || c.ObjectName == progressData.ObjectName) &&
-                    (string.IsNullOrWhiteSpace(progressData.ObjectType) || c.ObjectType == progressData.ObjectType));
+                    (string.IsNullOrWhiteSpace(progressData.ObjectType) || c.ObjectType == progressData.ObjectType) &&
+                    (string.IsNullOrWhiteSpace(progressData.SchemaOutName) || c.SchemaOutName == progressData.SchemaOutName));
                 if (startItem != null)
                 {
                     progressData.StartStageProgressData = startItem;

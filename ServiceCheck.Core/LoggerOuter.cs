@@ -70,7 +70,8 @@ namespace ServiceCheck.Core
             out string messageText)
         {
             messageText = "";
-
+            //TODO брать флаг из настроек
+            var showEventId = false;
 
             if (!checkOnNecessaryBySettings ||
                 IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.TextFilesLog))
@@ -87,8 +88,17 @@ namespace ServiceCheck.Core
                     messageText += Environment.NewLine;
                 }
 
+                var idsStr = "";
+                if (showEventId)
+                {
+                    idsStr = $" Id: {progressData.EventId}";
+                    if (progressData.StartStageProgressData != null)
+                        idsStr += $", ParentId: {progressData.StartStageProgressData.EventId}";
+                    idsStr += ".";
+                }
+
                 messageText +=
-                    $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}. ProcessId: {progressData.ProcessId}. {progressData.Message}{Environment.NewLine}";
+                    $"{progressData.EventTime.ToString("yyyy.MM.dd HH:mm:ss.fff")}.{idsStr} ProcessId: {progressData.ProcessId}. {progressData.Message}{Environment.NewLine}";
 
                 if (progressData.Level == ExportProgressDataLevel.ERROR &&
                     !string.IsNullOrWhiteSpace(progressData.ErrorDetails))
@@ -135,12 +145,13 @@ namespace ServiceCheck.Core
         {
             //TODO брать флаг из настроек
             var logCommitsContent = true;
+
             if (progressData.Stage == ExportProgressDataStageOuter.CREATE_SIMPLE_FILE_REPO_COMMIT &&
                 progressData.Level == ExportProgressDataLevel.STAGEENDINFO && logCommitsContent)
             {
 
                 var commitsList = progressData.GetAddInfo<List<RepoChangeItem>>("REPO_CHANGES");
-                var outerSchema = progressData.GetAddInfo<string>("OUTER_SCHEMA");
+                //var outerSchema = progressData.GetAddInfo<string>("OUTER_SCHEMA");
                 var info = GetCommitInfo(commitsList);
                 if (info != null)
                 {
@@ -155,7 +166,7 @@ namespace ServiceCheck.Core
                     var encodingToFile1251 = Encoding.GetEncoding(1251);
                     var pathToLog = _textFilesLog.PathToLogCommitsFilesC;
                     var fileName = Path.Combine(pathToLog,
-                        $"{progressData.DbFolder}_{outerSchema}_commits{PeriodAppendToLogFileName(_textFilesLog.LogCommitSplitPeriod)}.txt");
+                        $"{progressData.DbFolder}_{progressData.SchemaOutName}_commits{PeriodAppendToLogFileName(_textFilesLog.LogCommitSplitPeriod)}.txt");
                     lock (lockObj2)
                     {
                         if (!Directory.Exists(pathToLog))
@@ -173,6 +184,7 @@ namespace ServiceCheck.Core
         public void InsertMainTextFileLog(ExportProgressDataOuter progressData, bool checkOnNecessaryBySettings)
         {
             var messageText = "";
+            
 
             if (!checkOnNecessaryBySettings ||
                 IsNecessaryToInsertLogEntry(progressData.Level, progressData.Stage, LogType.TextFilesLog))

@@ -117,7 +117,7 @@ namespace ServiceCheck.Core
             List<string> orderGrantOptions)
         {
             StringBuilder grants = new StringBuilder();
-            var attr = grantsAttributes.Where(c => (c.ObjectSchema == null || c.ObjectSchema.ToUpper()==schemaName.ToUpper()) &&  c.ObjectName.ToUpper() == objectName.ToUpper()).ToList();
+            var attr = grantsAttributes.Where(c => c.ObjectSchema.ToUpper()==schemaName.ToUpper() &&  c.ObjectName.ToUpper() == objectName.ToUpper()).ToList();
             foreach (var granteeInfo in attr.GroupBy(c => c.Grantee)
                          .OrderBy(c => c.Key, new OracleLikeStringComparer()))
             {
@@ -196,7 +196,7 @@ namespace ServiceCheck.Core
                     sb.Append(
                         $"  references {addSchemaInfo}{outerConstraint.TableName} {getMergedColumns(outerConstraint.ConstraintColumnStructs.OrderBy(c => c.Position).Select(c => c.ColumnName).ToList())}");
                 }
-                if (!skipAbsenceForignKeys)
+                else if (!skipAbsenceForignKeys)
                     throw new Exception($"Не загружена информация о связанном ключе {constraint.RConstraintName}!");
             }
 
@@ -401,14 +401,20 @@ namespace ServiceCheck.Core
             bool skipAbsenceForignKeys)
         {
             var objectNameUpper = objectName.ToUpper();
-            var curTableStruct = tablesStructs.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
+            var curTableStruct = tablesStructs.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner==owner));
             var curTableColumnsStruct =
-                tablesColumnsStructs.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner)).ToList();
-            var curTableComment = tableComments.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
-            var curTableColumnsComments = columnsComments.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner)).ToList();
-            var curTableConstraints = tablesConstraints.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner == owner)).ToList();
-            var curTableIndexes = tablesIndexes.Where(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner)).ToList();
-            var curPartTable = partTables.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
+                tablesColumnsStructs.Where(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner==owner)).ToList();
+            var curTableComment = tableComments.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner == owner));
+            var curTableColumnsComments = columnsComments.Where(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner == owner)).ToList();
+            var curTableConstraints = tablesConstraints.Where(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner == owner)).ToList();
+            var curTableIndexes = tablesIndexes.Where(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner == owner)).ToList();
+            var curPartTable = partTables.FirstOrDefault(c => c.TableName.ToUpper() == objectNameUpper && (c.Owner == owner));
+
+            //если не нашли таблицу или
+            //хотя бы одного видимого поля таблицы, возвращаем пусто
+            if (curTableStruct == null ||
+                curTableColumnsStruct.All(c => c.HiddenColumn == "YES"))
+                return null;
 
             BindConstraintsColumnsAndIndexes(curTableConstraints, curTableColumnsStruct, curTableIndexes);
 
@@ -863,7 +869,7 @@ namespace ServiceCheck.Core
 
         public static string GetObjectDdlForSequence(List<SequenceAttributes> sequenceAttributesList, string owner, string objectName, bool resetStartValueTo1, List<string> addSlashTo)
         {
-            var attributes = sequenceAttributesList.FirstOrDefault(c => c.SequenceName.ToUpper() == objectName.ToUpper() && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
+            var attributes = sequenceAttributesList.FirstOrDefault(c => c.SequenceName.ToUpper() == objectName.ToUpper() && (c.SequenceOwner == owner));
 
             var sb = new StringBuilder($"create sequence {objectName.ToUpper()}");
             if (attributes.MinValue != null)
@@ -912,7 +918,9 @@ namespace ServiceCheck.Core
 
         public static string GetObjectDdlForSynonym(List<SynonymAttributes> synonymAttributesList, string owner, string objectName, List<string> addSlashTo)
         {
-            var attributes = synonymAttributesList.First(c => c.Name.ToUpper() == objectName.ToUpper() && (string.IsNullOrWhiteSpace(owner) || c.Owner==owner));
+            var attributes = synonymAttributesList.FirstOrDefault(c => c.Name.ToUpper() == objectName.ToUpper() && (c.Owner == owner));
+            if (attributes == null)
+                return null;
             var objectOwnerAddStr = "";
             if (!string.IsNullOrWhiteSpace(attributes.TargetSchema))
                 objectOwnerAddStr += attributes.TargetSchema + ".";
@@ -964,7 +972,7 @@ namespace ServiceCheck.Core
         {
             var ddl = new StringBuilder();
             var item = packagesHeaders.FirstOrDefault(c =>
-                c.Name == objectName && (c.Owner == owner || string.IsNullOrWhiteSpace(owner)));
+                c.Name == objectName && (c.Owner == owner));
 
             var headerText = item != null ? item.Text : string.Empty;
             var header = AddCreateOrReplace(headerText);
@@ -992,9 +1000,10 @@ namespace ServiceCheck.Core
         {
             var ddl = new StringBuilder();
             var item = packagesBodies.FirstOrDefault(c =>
-                c.Name == objectName && (c.Owner == owner || string.IsNullOrWhiteSpace(owner)));
+                c.Name == objectName && (c.Owner == owner));
 
-            var body = item != null ? item.Text : string.Empty;
+            var bodyText = item != null ? item.Text : string.Empty;
+            var body = AddCreateOrReplace(bodyText);
             if (!string.IsNullOrWhiteSpace(body))
             {
                 ddl.Append(body);

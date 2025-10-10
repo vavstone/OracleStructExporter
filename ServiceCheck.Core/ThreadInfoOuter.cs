@@ -17,6 +17,7 @@ namespace ServiceCheck.Core
         public List<string> SchemasExclude { get; set; }
         public ExportSettings ExportSettings { get; set; }
         public string ProcessId { get; set; }
+        public string Mode { get; set; }
         //public bool Finished { get; set; }
 
         //public string CommitName

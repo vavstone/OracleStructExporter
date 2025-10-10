@@ -6,6 +6,13 @@ namespace ServiceCheck.Core
 {
     public class ExportProgressDataOuter
     {
+        public DateTime EventTime { get; set; }
+        public string EventId { get; set; }
+
+        public ExportProgressDataLevel Level { get; set; }
+        public ExportProgressDataStageOuter Stage { get; set; }
+
+        public ExportProgressDataOuter StartStageProgressData { get; set; }
         public string ProcessId { get; set; }
         public Connection CurrentConnection { get; set; }
         public string DbLink { get; set; }
@@ -27,6 +34,15 @@ namespace ServiceCheck.Core
         public int? TypeObjCountFact { get; set; }
         public int? MetaObjCountFact { get; set; }
         public int? ErrorsCount { get; set; }
+        public int? WarningsCount { get; set; }
+
+        public string Error { get; set; }
+        public string ErrorDetails { get; set; }
+        //public string TextAddInfo { get; set; }
+        public Dictionary<string,string> textAddInfo { get; set; } = new Dictionary<string,string>();
+        public Dictionary<string, object> addInfo { get; set; } = new Dictionary<string, object>();
+
+        public string SchemaOutName { get; set; }
 
         public List<RepoChangeItem> RepoChangesPlainList
         {
@@ -93,11 +109,7 @@ namespace ServiceCheck.Core
         //public int ObjectNumAddInfo { get; set; }
         //public int AllProcessErrorsCount { get; internal set; }
 
-        public string Error { get; set; }
-        public string ErrorDetails { get; set; }
-        //public string TextAddInfo { get; set; }
-        public Dictionary<string,string> textAddInfo { get; set; } = new Dictionary<string,string>();
-        public Dictionary<string, object> addInfo { get; set; } = new Dictionary<string, object>();
+
 
         public void SetTextAddInfo(string key, string value)
         {
@@ -148,6 +160,7 @@ namespace ServiceCheck.Core
                 if (Level == ExportProgressDataLevel.ERROR) return $"Ошибка{objectAddStr}! {Error}";
                 if (Level == ExportProgressDataLevel.CANCEL) return "Операция отменена пользователем!";
                 if (Level == ExportProgressDataLevel.MOMENTALEVENTINFO) return GetTextAddInfo("MOMENTAL_INFO");
+                if (Level == ExportProgressDataLevel.WARNING) return GetTextAddInfo("WARNING_INFO");
 
 
                 if (Stage == ExportProgressDataStageOuter.PROCESS_MAIN)
@@ -156,20 +169,29 @@ namespace ServiceCheck.Core
                         return $"Запуск работы по:{Environment.NewLine}{GetTextAddInfo("SCHEMAS_TO_WORK")}";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
-                        errorsAddStr = $"{Environment.NewLine}Ошибок: {ErrorsCount}";
+                        errorsAddStr = $"{Environment.NewLine}Ошибок: {ErrorsCount}.";
+                    var warningsAddStr = "";
+                    if (WarningsCount > 0)
+                        warningsAddStr = $"{Environment.NewLine}Предупреждений: {WarningsCount}.";
                     var schemasAddStr = "";
                     var schemasSuccess = GetTextAddInfo("SCHEMAS_SUCCESS");
                     var schemasError = GetTextAddInfo("SCHEMAS_ERROR");
+                    var schemasWarning = GetTextAddInfo("SCHEMAS_WARNING");
                     if (!string.IsNullOrEmpty(schemasSuccess))
                         schemasAddStr += $"{Environment.NewLine}Успешно: {schemasSuccess}.";
                     if (!string.IsNullOrEmpty(schemasError))
-                    {
-                        //if (!string.IsNullOrWhiteSpace(schemasAddStr))
-                        //    schemasAddStr += " ";
                         schemasAddStr += $"{Environment.NewLine}Ошибки: {schemasError}.";
-                    }
+                    if (!string.IsNullOrEmpty(schemasWarning))
+                        schemasAddStr += $"{Environment.NewLine}Предупреждения: {schemasWarning}.";
 
-                    return $"Завершение работы.{schemasAddStr}{Environment.NewLine}Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{DurationString}.{errorsAddStr}";
+                    return $"Завершение работы.{schemasAddStr}{Environment.NewLine}Объекты схем ({ProcessObjCountFact} из {ProcessObjCountPlan}) выгружены{DurationString}.{errorsAddStr}{warningsAddStr}";
+                }
+
+                if (Stage == ExportProgressDataStageOuter.GET_CURRENT_DBLINK)
+                {
+                    if (Level == ExportProgressDataLevel.STAGESTARTINFO)
+                        return $"Получение рабочего dblink...";
+                    return $"Рабочий dblink получен{DurationString}";
                 }
 
                 if (Stage == ExportProgressDataStageOuter.PROCESS_SCHEMA)
@@ -183,19 +205,24 @@ namespace ServiceCheck.Core
                         return $"Выгрузка внешних объектов для схемы {connectAddStr} (DbLink: {dbLink}, DbFolder: {dbFolder})...";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
-                        errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Внешние объекты для схемы {connectAddStr} DbLink: {dbLink}, DbFolder: {dbFolder}) ({AllObjCountFact} из {AllObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
+                        errorsAddStr = $" Ошибок: {ErrorsCount}.";
+                    var warningsAddStr = "";
+                    if (WarningsCount > 0)
+                        warningsAddStr = $" Предупреждений: {WarningsCount}.";
+                    return $"Внешние объекты для схемы {connectAddStr} (DbLink: {dbLink}, DbFolder: {dbFolder}) ({AllObjCountFact} из {AllObjCountPlan}) выгружены{DurationString}.{errorsAddStr}{warningsAddStr}";
                 }
 
                 if (Stage == ExportProgressDataStageOuter.PROCESS_OUT_SCHEMA)
                 {
-                    var outSchemaName = GetTextAddInfo("OUTSCHEMANAME");
                     if (Level == ExportProgressDataLevel.STAGESTARTINFO)
-                        return $"Выгрузка объектов внешней схемы {outSchemaName} ({SchemaOutObjCountPlan} шт.)...";
+                        return $"Выгрузка объектов внешней схемы {SchemaOutName} ({SchemaOutObjCountPlan} шт.)...";
                     var errorsAddStr = "";
                     if (ErrorsCount > 0)
-                        errorsAddStr = $". Ошибок: {ErrorsCount}";
-                    return $"Объекты внешней схемы {outSchemaName} ({SchemaOutObjCountFact} из {SchemaOutObjCountPlan}) выгружены{errorsAddStr}{DurationString}";
+                        errorsAddStr = $" Ошибок: {ErrorsCount}.";
+                    var warningsAddStr = "";
+                    if (WarningsCount > 0)
+                        warningsAddStr = $" Предупреждений: {WarningsCount}.";
+                    return $"Объекты внешней схемы {SchemaOutName} ({SchemaOutObjCountFact} из {SchemaOutObjCountPlan}) выгружены{DurationString}.{errorsAddStr}{warningsAddStr}";
                 }
 
                 if (Stage == ExportProgressDataStageOuter.PROCESS_OBJECT_TYPE)
@@ -414,14 +441,7 @@ namespace ServiceCheck.Core
 
         }
 
-        public DateTime EventTime { get; set; }
-        public string EventId { get; set; }
 
-        public ExportProgressDataLevel Level { get; set; }
-        public ExportProgressDataStageOuter Stage { get; set; }
-
-
-        public ExportProgressDataOuter StartStageProgressData { get; set; }
 
 
         public TimeSpan Duration

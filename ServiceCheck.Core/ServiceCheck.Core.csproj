@@ -47,6 +47,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CommitShortInfo.cs" />
+    <Compile Include="Common.cs" />
     <Compile Include="CSVWorker.cs" />
     <Compile Include="DBStructs\DBMSJob.cs" />
     <Compile Include="DBStructs\DbLinkAttrigutes.cs" />
@@ -105,6 +106,7 @@
     <Compile Include="Settings\GitLabRepo.cs" />
     <Compile Include="Settings\IgnoreDifferences.cs" />
     <Compile Include="Settings\LineRuleForIgnoreDiff.cs" />
+    <Compile Include="Settings\ObjectsListSaveSettings.cs" />
     <Compile Include="Settings\SchedulerOuterSettings.cs" />
     <Compile Include="Settings\DbOuter.cs" />
     <Compile Include="Settings\WinAppSettings.cs" />

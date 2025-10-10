@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace ServiceCheck.Core
 {
@@ -6,6 +7,11 @@ namespace ServiceCheck.Core
     {
         public string SchemaName { get; set; }
         public string ObjectType { get; set; }
-        public List<string> ObjectNames { get; set; } = new List<string>();
+        public List<ObjectTypeName> Objects { get; set; } = new List<ObjectTypeName>();
+
+        public List<string> UniqueNames
+        {
+            get { return Objects.Select(c => c.ObjectName).Distinct().ToList(); }
+        }
     }
 }

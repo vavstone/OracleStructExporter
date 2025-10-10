@@ -40,5 +40,6 @@
 
         GET_CURRENT_DBLINK = 32,
         PROCESS_OUT_SCHEMA = 33,
+        SAVE_OBJECT_NAMES = 34,
     }
 }

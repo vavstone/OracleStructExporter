@@ -41,7 +41,61 @@ namespace ServiceCheck.Core
         }
 
 
-        public List<ObjectTypeNames> GetObjectsNames(List<string> objectTypesList, ExportProgressDataStage stage, out bool canceledByUser)
+        //public List<ObjectTypeNames> GetObjectsNames(List<string> objectTypesList, ExportProgressDataStage stage, out bool canceledByUser)
+        //{
+
+        //    if (_cancellationToken.IsCancellationRequested)
+        //    {
+        //        canceledByUser = true;
+        //        var progressDataCancel = new ExportProgressData(ExportProgressDataLevel.CANCEL, stage);
+        //        _progressDataManager.ReportCurrentProgress(progressDataCancel);
+        //        return null;
+        //    }
+        //    canceledByUser = false;
+
+        //    List<ObjectTypeNames> res = new List<ObjectTypeNames>();
+
+        //    var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
+        //    _progressDataManager.ReportCurrentProgress(progressData);
+
+        //    var counter = 0;
+        //    foreach (var objectType in objectTypesList)
+        //    {
+        //        try
+        //        {
+        //            var items = new List<string>();
+        //            string objectQuery = GetObjectQuery(objectType, _objectNameMask);
+        //            using (OracleCommand cmd = new OracleCommand(objectQuery, _connection))
+        //            {
+        //                using (OracleDataReader reader = cmd.ExecuteReader())
+        //                {
+        //                    while (reader.Read())
+        //                    {
+        //                        items.Add(reader[0].ToString());
+        //                        counter++;
+        //                    }
+        //                }
+        //            }
+        //            res.Add(new ObjectTypeNames { ObjectType = objectType, ObjectNames = items });
+        //        }
+        //        catch (Exception e)
+        //        {
+        //            var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+        //            progressDataErr.Error = e.Message;
+        //            progressDataErr.ErrorDetails = e.StackTrace;
+        //            _progressDataManager.ReportCurrentProgress(progressDataErr);
+        //        }
+        //    }
+
+        //    var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+        //    progressData2.SchemaObjCountPlan = counter;
+        //    progressData2.MetaObjCountFact = counter;
+        //    _progressDataManager.ReportCurrentProgress(progressData2);
+
+        //    return res;
+        //}
+
+        public List<ObjectTypeNames> GetObjectsNames(List<string> objectTypesList, ExportProgressDataStage stage, string currentSchemaName, out bool canceledByUser)
         {
             
             if (_cancellationToken.IsCancellationRequested)
@@ -54,40 +108,117 @@ namespace ServiceCheck.Core
             canceledByUser = false;
 
             List<ObjectTypeNames> res = new List<ObjectTypeNames>();
-            
+
             var progressData = new ExportProgressData(ExportProgressDataLevel.STAGESTARTINFO, stage);
             _progressDataManager.ReportCurrentProgress(progressData);
-            
-            var counter = 0;
-            foreach (var objectType in objectTypesList)
+
+            var objTypesList2 = objectTypesList.Select(c => Common.GetObjectTypeName(c)).ToList();
+            if (objTypesList2.Contains("PACKAGE"))
+                objTypesList2.Add("PACKAGE BODY");
+
+            var objTypesNotJobs = objTypesList2.Where(c => c != "JOB").ToList();
+            var objTypesJobs = objTypesList2.Where(c => c == "JOB").ToList();
+
+            try
             {
-                try
+                var items = new List<ObjectTypeName>();
+                if (objTypesNotJobs.Any())
                 {
-                    var items = new List<string>();
-                    string objectQuery = GetObjectQuery(objectType, _objectNameMask);
+                    string objectQuery = GetObjectQuery(objTypesNotJobs, false, _objectNameMask);
                     using (OracleCommand cmd = new OracleCommand(objectQuery, _connection))
                     {
                         using (OracleDataReader reader = cmd.ExecuteReader())
                         {
                             while (reader.Read())
                             {
-                                items.Add(reader[0].ToString());
-                                counter++;
+                                var item = new ObjectTypeName();
+                                item.Owner = currentSchemaName.ToUpper();
+                                if (!reader.IsDBNull(reader.GetOrdinal("object_type")))
+                                    item.ObjectType = reader["object_type"].ToString();
+                                item.ObjectName = reader["object_name"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("object_id")))
+                                    item.ObjectId = reader.GetInt32(reader.GetOrdinal("object_id"));
+                                if (!reader.IsDBNull(reader.GetOrdinal("created")))
+                                    item.Created = reader.GetDateTime(reader.GetOrdinal("created"));
+                                if (!reader.IsDBNull(reader.GetOrdinal("last_ddl_time")))
+                                    item.LastDDLTime = reader.GetDateTime(reader.GetOrdinal("last_ddl_time"));
+                                if (!reader.IsDBNull(reader.GetOrdinal("status")))
+                                    item.Status = reader["status"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("generated")))
+                                    item.Generated = reader["generated"].ToString();
+                                items.Add(item);
                             }
                         }
                     }
-                    res.Add(new ObjectTypeNames { ObjectType = objectType, ObjectNames = items});
                 }
-                catch (Exception e)
+
+                if (objTypesJobs.Any())
                 {
-                    var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
-                    progressDataErr.Error = e.Message;
-                    progressDataErr.ErrorDetails = e.StackTrace;
-                    _progressDataManager.ReportCurrentProgress(progressDataErr);
+                    string objectQuery = GetObjectQuery(objTypesJobs, true, _objectNameMask);
+                    using (OracleCommand cmd = new OracleCommand(objectQuery, _connection))
+                    {
+                        using (OracleDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var item = new ObjectTypeName();
+                                item.Owner = currentSchemaName.ToUpper();
+                                item.ObjectType = reader["object_type"].ToString();
+                                item.ObjectName = reader["object_name"].ToString();
+                                if (!reader.IsDBNull(reader.GetOrdinal("status")))
+                                    item.Status = reader["status"].ToString();
+                                items.Add(item);
+                            }
+                        }
+                    }
                 }
+
+                foreach (var item in items)
+                {
+                    string type;
+                    switch (item.ObjectType)
+                    {
+                        case "PACKAGE BODY":
+                            type = "PACKAGE";
+                            break;
+                        case "DATABASE LINK":
+                            type = "DB_LINK";
+                            break;
+                        case "SCHEDULER_JOB":
+                            type = "JOB";
+                            break;
+                        case "DBMS_JOB":
+                            type = "JOB";
+                            break;
+                        default:
+                            type = item.ObjectType;
+                            break;
+                    }
+
+                    var typeCommonName = Common.GetObjectTypeNameReverse(type);
+                    ObjectTypeNames resItem = res.FirstOrDefault(c =>
+                        c.SchemaName == item.Owner && c.ObjectType == typeCommonName);
+                    if (resItem == null)
+                    {
+                        resItem = new ObjectTypeNames {SchemaName = item.Owner, ObjectType = typeCommonName};
+                        res.Add(resItem);
+                    }
+                    if (resItem.Objects.All(c => c.ObjectName != item.ObjectName ||
+                                                     (type=="PACKAGE" && c.ObjectType!=item.ObjectType)))
+                        resItem.Objects.Add(item);
+                }
+
+            }
+            catch (Exception e)
+            {
+                var progressDataErr = new ExportProgressData(ExportProgressDataLevel.ERROR, stage);
+                progressDataErr.Error = e.Message;
+                progressDataErr.ErrorDetails = e.StackTrace;
+                _progressDataManager.ReportCurrentProgress(progressDataErr);
             }
 
             var progressData2 = new ExportProgressData(ExportProgressDataLevel.STAGEENDINFO, stage);
+            var counter = res.Sum(c => c.UniqueNames.Count);
             progressData2.SchemaObjCountPlan = counter;
             progressData2.MetaObjCountFact = counter;
             _progressDataManager.ReportCurrentProgress(progressData2);
@@ -95,30 +226,10 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        // Сопоставление типов объектов с их представлениями в БД
-        static readonly Dictionary<string, string> objectTypeMapping = new Dictionary<string, string>
-        {
-            {"FUNCTIONS", "FUNCTION"},
-            {"PACKAGES", "PACKAGE"},
-            {"PROCEDURES", "PROCEDURE"},
-            {"SEQUENCES", "SEQUENCE"},
-            {"SYNONYMS", "SYNONYM"},
-            {"TABLES", "TABLE"},
-            {"TRIGGERS", "TRIGGER"},
-            {"TYPES", "TYPE"},
-            {"VIEWS", "VIEW"},
-            {"JOBS", "JOB"},
-            {"DBLINKS", "DB_LINK"}
-        };
-
-        public static string GetObjectTypeName(string objectTypeCommonName)
-        {
-            return objectTypeMapping[objectTypeCommonName];
-        }
 
         public string GetObjectSource(string objectName, string objectType, List<string> addSlashTo, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current,out bool canceledByUser)
         {
-            string dbObjectType = GetObjectTypeName(objectType);
+            string dbObjectType = Common.GetObjectTypeName(objectType);
             const string sourceQuery = @"
                 SELECT text 
                 FROM user_source 
@@ -238,51 +349,66 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public static string GetObjectQuery(string objectType, MaskForFileNames objectNameMask)
+        //public static string GetObjectQuery(string objectType, MaskForFileNames objectNameMask)
+        //{
+        //    switch (objectType)
+        //    {
+        //        case "FUNCTIONS":
+        //        case "PROCEDURES":
+        //        case "TRIGGERS":
+        //        case "TYPES":
+        //        case "VIEWS":
+        //            return "SELECT object_name FROM user_objects " +
+        //                   $"WHERE object_type = '{Common.GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
+        //                   "ORDER BY object_name";
+
+        //        case "PACKAGES":
+        //            return "SELECT distinct (object_name) FROM user_objects " +
+        //                   "WHERE object_type in ('PACKAGE','PACKAGE BODY') " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
+        //                   "ORDER BY object_name";
+
+        //        case "SEQUENCES":
+        //            return "SELECT sequence_name AS object_name FROM user_sequences " + GetAddObjectNameMaskWhere("sequence_name", objectNameMask, true) +
+        //                   "ORDER BY sequence_name";
+
+        //        case "SYNONYMS":
+        //            return "SELECT synonym_name AS object_name FROM user_synonyms " + GetAddObjectNameMaskWhere("synonym_name", objectNameMask, true) +
+        //                   "ORDER BY synonym_name";
+
+        //        case "TABLES":
+        //            return "SELECT table_name AS object_name FROM user_tables " + GetAddObjectNameMaskWhere("table_name", objectNameMask, true) +
+        //                   "ORDER BY table_name";
+
+        //        case "JOBS":
+        //            return $"SELECT job_name AS object_name FROM user_scheduler_jobs{GetAddObjectNameMaskWhere("job_name", objectNameMask, true)} union all select to_char(job) from user_jobs";
+
+        //        case "DBLINKS":
+        //            return "SELECT db_link AS object_name FROM user_db_links " + GetAddObjectNameMaskWhere("db_link", objectNameMask, true) +
+        //                   "ORDER BY db_link";
+
+        //        default:
+        //            return "SELECT object_name FROM user_objects " +
+        //                   $"WHERE object_type = '{Common.GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
+        //                   "ORDER BY object_name";
+        //    }
+        //}
+
+        public string GetObjectQuery(List<string> objectTypesList, bool isJobs, MaskForFileNames objectNameMask)
         {
-            switch (objectType)
+            if (!isJobs)
             {
-                case "FUNCTIONS":
-                case "PROCEDURES":
-                case "TRIGGERS":
-                case "TYPES":
-                case "VIEWS":
-                    return "SELECT object_name FROM user_objects " +
-                           $"WHERE object_type = '{GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
-                           "ORDER BY object_name";
-
-                case "PACKAGES":
-                    return "SELECT distinct (object_name) FROM user_objects " +
-                           "WHERE object_type in ('PACKAGE','PACKAGE BODY') " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
-                           "ORDER BY object_name";
-
-                case "SEQUENCES":
-                    return "SELECT sequence_name AS object_name FROM user_sequences " + GetAddObjectNameMaskWhere("sequence_name", objectNameMask, true) +
-                           "ORDER BY sequence_name";
-
-                case "SYNONYMS":
-                    return "SELECT synonym_name AS object_name FROM user_synonyms " + GetAddObjectNameMaskWhere("synonym_name", objectNameMask, true) +
-                           "ORDER BY synonym_name";
-
-                case "TABLES":
-                    return "SELECT table_name AS object_name FROM user_tables " + GetAddObjectNameMaskWhere("table_name", objectNameMask, true) +
-                           "ORDER BY table_name";
-
-                case "JOBS":
-                    return $"SELECT job_name AS object_name FROM user_scheduler_jobs{GetAddObjectNameMaskWhere("job_name", objectNameMask, true)} union all select to_char(job) from user_jobs";
-
-                case "DBLINKS":
-                    return "SELECT db_link AS object_name FROM user_db_links " + GetAddObjectNameMaskWhere("db_link", objectNameMask, true) +
-                           "ORDER BY db_link";
-
-                default:
-                    return "SELECT object_name FROM user_objects " +
-                           $"WHERE object_type = '{GetObjectTypeName(objectType)}' " + GetAddObjectNameMaskWhere("object_name", objectNameMask, false) +
-                           "ORDER BY object_name";
+                var objTypesStr = objectTypesList.Select(c=>c=="DB_LINK"?"DATABASE LINK":c).ToList().MergeFormatted("'", ",");
+                return $"SELECT object_type, object_name, object_id, created, last_ddl_time, status, generated FROM user_objects WHERE OBJECT_TYPE IN ({objTypesStr}){GetAddObjectNameMaskWhere("object_name", objectNameMask, false)}";
+            }
+            else
+            {
+                return $"SELECT 'SCHEDULER_JOB' object_type, job_name object_name, state status FROM user_scheduler_jobs{GetAddObjectNameMaskWhere("job_name", objectNameMask, true)}" +
+                       " UNION ALL " +
+                       "SELECT 'DBMS_JOB' object_type, to_char(job) object_name, decode(broken,'Y','BROKEN','N','VALID',null) status from user_jobs";
             }
         }
 
-        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<SynonymAttributes> GetSynonyms(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string owner, out bool canceledByUser)
         {
             var res = new List<SynonymAttributes>();
 
@@ -317,6 +443,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SynonymAttributes();
+                            item.Owner = owner;
                             item.Name = reader["synonym_name"].ToString();
                             item.TargetSchema = reader["table_owner"].ToString();
                             item.TargetObjectName = reader["table_name"].ToString();
@@ -349,7 +476,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<SequenceAttributes> GetSequences(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<SequenceAttributes> GetSequences(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string owner, out bool canceledByUser)
         {
             var res = new List<SequenceAttributes>();
 
@@ -383,6 +510,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SequenceAttributes();
+                            item.SequenceOwner = owner;
                             item.SequenceName = reader["sequence_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("min_value")))
                                 item.MinValue = reader.GetDouble(reader.GetOrdinal("min_value"));
@@ -426,7 +554,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<SchedulerJob> GetSchedulerJobs(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string owner, out bool canceledByUser)
         {
             var res = new List<SchedulerJob>();
 
@@ -460,6 +588,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SchedulerJob();
+                            item.Owner = owner;
                             item.JobName = reader["job_name"].ToString();
                             item.JobType = reader["job_type"].ToString();
                             item.JobAction = reader["job_action"].ToString();
@@ -487,6 +616,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new SchedulerJobArgument();
+                            item.Owner = owner;
                             item.JobName = reader["job_name"].ToString();
                             item.ArgumentName = reader["argument_name"].ToString();
                             item.ArgumentPosition = reader.GetInt32(reader.GetOrdinal("argument_position"));
@@ -522,7 +652,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<DBMSJob> GetDBMSJobs(ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string owner, out bool canceledByUser)
         {
             var res = new List<DBMSJob>();
 
@@ -556,6 +686,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new DBMSJob();
+                            item.SchemaUser = owner;
                             item.Job = reader.GetInt32(reader.GetOrdinal("job"));
                             item.What = reader["what"].ToString();
                             item.Interval = reader["interval"].ToString();
@@ -653,7 +784,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<ColumnComment> GetTablesAndViewsColumnComments(ExportProgressDataStage stage, int schemaObjCountPlan, out bool canceledByUser)
+        public List<ColumnComment> GetTablesAndViewsColumnComments(ExportProgressDataStage stage, int schemaObjCountPlan, string owner, out bool canceledByUser)
         {
             var res = new List<ColumnComment>();
 
@@ -682,6 +813,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new ColumnComment();
+                            item.Owner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             item.Comments = reader["comments"].ToString();
@@ -707,7 +839,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<TableOrViewComment> GetTableOrViewComments(string objectType, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string owner, out bool canceledByUser)
         {
             var res = new List<TableOrViewComment>();
 
@@ -741,6 +873,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TableOrViewComment();
+                            item.Owner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.Comments = reader["comments"].ToString();
                             res.Add(item);
@@ -772,7 +905,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableStruct> GetTablesStruct (ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
+        public List<TableStruct> GetTablesStruct (ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, string owner, out bool canceledByUser)
         {
             var res = new List<TableStruct>();
 
@@ -806,6 +939,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TableStruct();
+                            item.Owner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.Partitioned = reader["partitioned"].ToString();
                             item.Temporary = reader["temporary"].ToString();
@@ -840,7 +974,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<TableColumnStruct> GetTablesAndViewsColumnsStruct(ExportProgressDataStage stage, int schemaObjCountPlan, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
+        public List<TableColumnStruct> GetTablesAndViewsColumnsStruct(ExportProgressDataStage stage, int schemaObjCountPlan, Dictionary<string, List<string>> systemViewInfo, string owner, out bool canceledByUser)
         {
             var res = new List<TableColumnStruct>();
 
@@ -872,6 +1006,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TableColumnStruct();
+                            item.Owner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             item.DataType = reader["data_type"].ToString();
@@ -910,6 +1045,7 @@ namespace ServiceCheck.Core
                             while (reader.Read())
                             {
                                 var item = new TableIdentityColumnStruct();
+                                item.Owner = owner;
                                 item.TableName = reader["table_name"].ToString();
                                 item.ColumnName = reader["column_name"].ToString();
                                 item.GenerationType = reader["generation_type"].ToString();
@@ -940,7 +1076,7 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, out bool canceledByUser)
+        public List<PartTables> GetTablesPartitions(GetPartitionMode getPartitionMode, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, Dictionary<string, List<string>> systemViewInfo, string owner, out bool canceledByUser)
         {
             var res = new List<PartTables>();
 
@@ -984,6 +1120,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new PartTables();
+                            item.Owner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.PartitioningType = reader["partitioning_type"].ToString();
                             item.SubPartitioningType = reader["subpartitioning_type"].ToString();
@@ -1017,6 +1154,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new PartOrSubPartKeyColumns();
+                            item.Owner = owner;
                             item.TableName = reader["name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
@@ -1039,6 +1177,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new PartOrSubPartKeyColumns();
+                            item.Owner = owner;
                             item.TableName = reader["name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("column_position")))
@@ -1063,6 +1202,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TabPartitions();
+                            item.TableOwner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.PartitionName = reader["partition_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("subpartition_count")))
@@ -1090,6 +1230,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new TabSubPartitions();
+                            item.TableOwner = owner;
                             item.TableName = reader["table_name"].ToString();
                             item.PartitionName = reader["partition_name"].ToString();
                             item.SubPartitionName = reader["subpartition_name"].ToString();
@@ -1340,40 +1481,6 @@ namespace ServiceCheck.Core
             return res;
         }
 
-        //public DateTime? GetLastSuccessExportForSchema(string dbidC, string username)
-        //{
-        //    try
-        //    {
-        //        string ddlQuery =
-        //            @"select max(eventtime) max_eventtime from OSECACONNWORKLOG where upper(dbid)=:dbid and upper(username)=:username
-        //                            and stage='PROCESS_SCHEMA' and eventlevel='STAGEENDINFO' and errorscount=0";
-        //        using (OracleConnection connection = new OracleConnection(ConnectionString))
-        //        {
-        //            connection.Open();
-        //            using (OracleCommand cmd = new OracleCommand(ddlQuery, connection))
-        //            {
-        //                cmd.Parameters.Add("dbid", OracleType.VarChar).Value = dbidC.ToUpper();
-        //                cmd.Parameters.Add("username", OracleType.VarChar).Value = username.ToUpper();
-        //                using (OracleDataReader reader = cmd.ExecuteReader())
-        //                {
-        //                    if (reader.Read())
-        //                    {
-        //                        if (!reader.IsDBNull(reader.GetOrdinal("max_eventtime")))
-        //                            return reader.GetDateTime(reader.GetOrdinal("max_eventtime"));
-        //                        return null;
-        //                    }
-        //                }
-        //            }
-        //        }
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        throw e;
-        //    }
-
-        //    return null;
-        //}
-
         public List<IndexStruct> GetTablesIndexes(string schemaName, ExportProgressDataStage stage, int schemaObjCountPlan, int typeObjCountPlan, int current, string objectTypeMulti, out bool canceledByUser)
         {
             var res = new List<IndexStruct>();
@@ -1412,6 +1519,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new IndexStruct();
+                            item.Owner = schemaName;
                             item.TableName = reader["table_name"].ToString();
                             item.IndexName = reader["index_name"].ToString();
                             item.IndexType = reader["index_type"].ToString();
@@ -1435,6 +1543,7 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new IndexColumnStruct();
+                            item.TableOwner = schemaName;
                             item.TableName = reader["table_name"].ToString();
                             item.IndexName = reader["index_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
@@ -1596,7 +1705,7 @@ namespace ServiceCheck.Core
                         }
                     }
                 }
-                ddlQuery = $@"select table_name, constraint_name, column_name, position from ALL_CONS_COLUMNS
+                ddlQuery = $@"select owner, table_name, constraint_name, column_name, position from ALL_CONS_COLUMNS
                             where (owner,table_name,constraint_name) in 
                             (select owner, table_name, constraint_name from ALL_CONSTRAINTS
                             where (owner,constraint_name) in 
@@ -1609,12 +1718,13 @@ namespace ServiceCheck.Core
                         while (reader.Read())
                         {
                             var item = new ConstraintColumnStruct();
+                            item.Owner = reader["owner"].ToString();
                             item.TableName = reader["table_name"].ToString();
                             item.ConstraintName = reader["constraint_name"].ToString();
                             item.ColumnName = reader["column_name"].ToString();
                             if (!reader.IsDBNull(reader.GetOrdinal("position")))
                                 item.Position = reader.GetInt32(reader.GetOrdinal("position"));
-                            var constraint = outerConstraints.FirstOrDefault(c => c.TableName.ToUpper() == item.TableName.ToUpper() && c.ConstraintName.ToUpper() == item.ConstraintName.ToUpper());
+                            var constraint = outerConstraints.FirstOrDefault(c => c.Owner == item.Owner && c.TableName.ToUpper() == item.TableName.ToUpper() && c.ConstraintName.ToUpper() == item.ConstraintName.ToUpper());
                             if (constraint != null)
                                 constraint.ConstraintColumnStructs.Add(item);
                         }
@@ -1790,6 +1900,7 @@ namespace ServiceCheck.Core
                             if (!skipGrantOptions.Contains(reader["privilege"].ToString().ToUpper()))
                             {
                                 var item = new GrantAttributes();
+                                item.ObjectSchema = schemaName;
                                 item.ObjectName = reader["table_name"].ToString();
                                 item.Grantee = reader["grantee"].ToString();
                                 item.Privilege = reader["privilege"].ToString();
@@ -1825,7 +1936,7 @@ namespace ServiceCheck.Core
                 SELECT dbms_metadata.get_ddl(:objectType, :objectName) AS ddl 
                 FROM dual";
 
-            string dbObjectType = GetObjectTypeName(objectTypeMulti);
+            string dbObjectType = Common.GetObjectTypeName(objectTypeMulti);
 
             if (_cancellationToken.IsCancellationRequested)
             {
@@ -1874,7 +1985,7 @@ namespace ServiceCheck.Core
                 if (dbObjectType == "SEQUENCE")
                 {
                     if (setSequencesValuesTo1)
-                        ddl = ResetStartSequenceValue(ddl);
+                        ddl = Common.ResetStartSequenceValue(ddl);
                 }
 
                 if (addSlashTo.Contains(objectTypeMulti))
@@ -1905,18 +2016,7 @@ namespace ServiceCheck.Core
             return ddl;
         }
 
-        public static string ResetStartSequenceValue(string sql)
-        {
-            string pattern = @"(START\s+WITH\s+)(\d+)";
-
-            string result = Regex.Replace(
-                sql,
-                pattern,
-                match => match.Groups[1].Value + "1",
-                RegexOptions.IgnoreCase
-            );
-            return result;
-        }
+        
 
         public void SetSessionTransform(Dictionary<string,string> sessionTransform)
         {
